@@ -98,7 +98,7 @@ export class Player {
     // 移動
     let speed = this.stance === 2 ? 0.9 : this.stance === 1 ? 2.0 : sprint ? 6.4 : 4.1;
     speed *= 1 - this.ads * 0.42;
-    if (k.KeyQ || k.AltLeft) speed = Math.min(speed, 1.5);   // ゆっくり歩く
+    if (k.KeyQ || k.AltLeft) speed = Math.min(speed, 1.2);   // ゆっくり歩く（歩行モーションの速度に合わせる）
     if (!this.alive) speed = 0;
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
