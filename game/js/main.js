@@ -9,6 +9,7 @@ import { Player } from './player.js';
 import { EnemyManager } from './enemies.js';
 import { isTouchDevice, setupTouch } from './touch.js';
 import { Avatar } from './avatar.js';
+import { rigViewmodel } from './reload.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -151,7 +152,10 @@ function applyWeather(name) {
 // 一人称の銃は別パスで描く（壁にめり込まない）
 const vmScene = new THREE.Scene();
 const vmCamera = new THREE.PerspectiveCamera(72, camera.aspect, 0.01, 10);
-vmScene.add(new THREE.HemisphereLight(0xc8c4ba, 0x4a4036, 1.4));
+vmScene.add(new THREE.HemisphereLight(0xc8c4ba, 0x4a4036, 1.7));
+// 黒い手袋・袖が黒い銃に溶け込まないよう、カメラ側から弱い補助光
+const vmFill = new THREE.PointLight(0xfff1dd, 0.7, 3, 1.5);
+vmCamera.add(vmFill); vmFill.position.set(-0.25, 0.25, 0.2); vmScene.add(vmCamera);
 const vmSun = new THREE.DirectionalLight(0xffd8a8, 1.8);
 vmSun.position.copy(SUN_DIR).multiplyScalar(10);
 vmScene.add(vmSun);
@@ -202,7 +206,7 @@ async function load() {
   // 配信先が .glb を扱えない場合は埋め込み glTF（.json）を使う（window.__ASSET_EXT で指定）
   const ext = window.__ASSET_EXT || '.glb';
   // モデルを更新したら古いキャッシュを使わないよう版を付ける
-  const ASSET_V = '?v=20261102d';
+  const ASSET_V = '?v=20261102e';
   const [soldier, vm, av] = await Promise.all([loadGLB('assets/soldier' + ext + ASSET_V, 0.55, 0.85), loadGLB('assets/viewmodel' + ext + ASSET_V, 0.85, 0.9),
     loadGLB('assets/avatar' + ext + ASSET_V, 0.9, 0.98)]);
   // ビューモデル
@@ -215,7 +219,9 @@ async function load() {
     }
   });
   vmRoot.add(vm.scene);
+  const vmParts = rigViewmodel(vm.scene);   // 本体・マガジン・左腕・右腕に分けてリロードで動かす
   player = new Player(camera, world, vmRoot, fx, audio);
+  player.vmParts = vmParts;
   player.onShoot = shoot;
   player.onFired = (o) => enemies.noise(o, 60);
   soldier.scene.traverse((o) => {

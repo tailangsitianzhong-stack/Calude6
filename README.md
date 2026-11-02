@@ -25,7 +25,11 @@ Dope Sheet → **Action Editor** でアクションを切り替えます（ラ�
 | `Prone` | 匍匐前進（ロークロール：肘で引き、膝を横に引き寄せて押す） | 48f | 0.34 m/s |
 | `Prone_Rifle` | 銃を前腕の上に寝かせて匍匐 | 48f | 0.34 m/s |
 | `Jump` / `Jump_Rifle` | 踏み込み→踏み切り→空中で膝を引き付け→着地で吸収→立ち直り（高さ 0.42m） | 40f | — |
-| `Idle_Rifle` | 構えて立つ（呼吸） | 60f | — |
+| `Idle_Rifle` | 照準して立つ（頬付け、呼吸） | 60f | — |
+| `Idle_Ready` / `Walk_Ready` | 腰だめ（銃は胸の高さで前方）で立つ・歩く（Call of Duty 風） | 60f / 32f | — / 1.2 m/s |
+| `Jog_Rifle` | 腰だめで走る（ゲームの通常移動） | 18f | 4.1 m/s |
+| `Sprint_Rifle` | 銃を斜めに抱えて全力疾走 | 17f | 5.5 m/s |
+| `Walk_Aim` | 照準したまま歩く | 28f | 1.6 m/s |
 | `Death` | 被弾でのけぞる→膝が崩れる→膝をつく→前のめりに倒れる→右側を下に横たわる（銃は手を離れて落ちる） | 54f | — |
 
 その場で再生したい場合は、アクション内の `location`（Root Motion グループ）の F カーブをミュートしてください。
@@ -59,6 +63,8 @@ cd game && python3 -m http.server 8000   # → http://localhost:8000/
 - メニューで天候を「くもり／晴れ」から選べます（`?weather=sunny` でも指定可）
 - 見学モードでは V キー（スマホは「視点」ボタン）で三人称視点。プレイヤーはゴースト版の兵士（`game/assets/avatar.glb`）で、歩く・走る・しゃがみ・匍匐・ジャンプのモーションが動きに合わせて切り替わります
 - 一時停止画面で画質を「低／標準／高」から選べます（解像度の上限と影。重いときは自動で少し下げます）
+- 一人称のリロードは Call of Duty 風：残弾ありはタクティカル（薬室 +1）、空はマガジンを落としてボルトキャッチを叩く
+- 三人称では普段は腰だめ、照準（右クリック）中だけ目線で狙う
 - `?low` で影なし・低解像度（スマホは既定でこちら。`?high` で通常表示）
 - `.glb` を配信できないホスティングでは、埋め込み glTF（`.json`）を置いて `window.__ASSET_EXT = ".json"` を指定
 - アセットの再書き出し：`blender --background --python export_game_assets.py -- soldier_175cm.blend soldier_175cm_ghost.blend game/assets`

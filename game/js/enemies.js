@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 // 各アクションのルートモーション速度（m/s）＝ Blender の焼き込み値
-const ANIM_SPEED = { Walk_Rifle: 1.17 / (32 / 30), Run_Rifle: 2.4 / (20 / 30), Crouch_Rifle: 0.81 / (36 / 30) };
+const ANIM_SPEED = { Walk_Ready: 1.30 / (32 / 30), Jog_Rifle: 2.46 / (18 / 30), Crouch_Rifle: 1.47 * 0.85 / (32 / 30) };
 const EYE = 1.55;
 
 function stripRootMotion(clip) {
@@ -100,7 +100,7 @@ class Enemy {
     // glTF 読み込み時に名前の「.」は除かれる（thigh.L → thighL）ので、両方の名前で引けるようにする
     root.traverse((o) => { if (o.isBone) { this.bones[o.name] = o; } if (o.name === 'Rifle') this.rifle = o; });
     this.cur = null;
-    this.play('Walk_Rifle', 0);
+    this.play('Walk_Ready', 0);
     this.health = 100;
     this.alive = true;
     this.deadTime = 0;
@@ -220,7 +220,7 @@ class Enemy {
       }
     }
     this.reaction -= dt;
-    let moveTarget = null, desired = 'Walk_Rifle', speed = ANIM_SPEED.Walk_Rifle;
+    let moveTarget = null, desired = 'Walk_Ready', speed = ANIM_SPEED.Walk_Ready;
     const distP = pos.distanceTo(P.pos);
 
     if (this.state === 'patrol') {
@@ -234,7 +234,7 @@ class Enemy {
       // 最後に見た／聞いた地点へ走る
       if (!this.path.length && this.lastSeen) this.path = this.mgr.path(pos, this.lastSeen).concat([this.lastSeen.clone()]);
       moveTarget = this.path[0];
-      desired = 'Run_Rifle'; speed = ANIM_SPEED.Run_Rifle;
+      desired = 'Jog_Rifle'; speed = ANIM_SPEED.Jog_Rifle;
       if (!moveTarget || (this.lastSeen && pos.distanceTo(this.lastSeen) < 2)) { this.state = 'patrol'; this.path = []; }
     } else if (this.state === 'engage') {
       if (!this.canSee) {
@@ -245,7 +245,7 @@ class Enemy {
         // 間合い：遠ければしゃがみ前進、近すぎれば立ち止まって撃つ
         if (Math.random() < dt * 0.25) this.crouchMode = !this.crouchMode;
         if (distP > 22 && this.crouchMode) { desired = 'Crouch_Rifle'; speed = ANIM_SPEED.Crouch_Rifle; moveTarget = P.pos; }
-        else if (distP > 45) { desired = 'Run_Rifle'; speed = ANIM_SPEED.Run_Rifle; moveTarget = P.pos; }
+        else if (distP > 45) { desired = 'Jog_Rifle'; speed = ANIM_SPEED.Jog_Rifle; moveTarget = P.pos; }
         else { desired = 'Idle_Rifle'; speed = 0; }
         this.shoot(dt, distP);
       }

@@ -1,7 +1,9 @@
 // 一人称プレイヤー：移動・衝突・視点・武器（M16A2：単発／3 点バースト）
 import * as THREE from 'three';
+import { RELOAD, poseReload, resetReload } from './reload.js';
 
 const STAND_EYE = 1.62, CROUCH_EYE = 1.08, PRONE_EYE = 0.38;
+const lerpN = (a, b, t) => a + (b - a) * t;
 const VM_BASE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
 
 export class Player {
@@ -68,9 +70,13 @@ export class Player {
   }
 
   reload() {
-    if (this.reloading > 0 || this.mag === 30 || this.reserve <= 0 || !this.alive) return;
-    this.reloading = 2.4;
-    this.audio.reload();
+    if (this.reloading > 0 || this.mag >= 30 || this.reserve <= 0 || !this.alive) return;
+    // 残弾があればタクティカル、空ならエンプティ（ボルトキャッチを叩く分だけ長い）
+    this.reloadKind = this.mag > 0 ? 'tactical' : 'empty';
+    this.reloadT = 0;
+    this.reloadSeated = false;
+    this.reloading = RELOAD[this.reloadKind].dur;
+    this.audio.reload(this.reloadKind);
   }
 
   damage(amount, fromPos) {
@@ -96,8 +102,9 @@ export class Player {
     let ceil = this.world.ceiling(this.pos, 0.3, this.pos.y + 0.5);
     if (eyeT <= this.eye || this.pos.y + eyeT + 0.15 < ceil) this.eye += (eyeT - this.eye) * Math.min(1, dt * (this.stance === 2 ? 5 : 10));
     // 移動
-    let speed = this.stance === 2 ? 0.9 : this.stance === 1 ? 2.0 : sprint ? 6.4 : 4.1;
-    speed *= 1 - this.ads * 0.42;
+    // 三人称のモーション速度に合わせた移動速度（足が滑らない）：伏せ 0.34 / しゃがみ 1.17 / 通常 4.1 / ダッシュ 5.5 m/s
+    let speed = this.stance === 2 ? 0.34 : this.stance === 1 ? 1.17 : sprint ? 5.5 : 4.1;
+    if (this.stance === 0) speed = lerpN(speed, 1.6, this.ads);   // 照準しながら歩く 1.6 m/s
     if (k.KeyQ || k.AltLeft) speed = Math.min(speed, 1.2);   // ゆっくり歩く（歩行モーションの速度に合わせる）
     if (!this.alive) speed = 0;
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -145,10 +152,17 @@ export class Player {
     const hs0 = Math.hypot(this.vel.x, this.vel.z);
     if (this.reloading > 0) {
       this.reloading -= dt;
-      if (this.reloading <= 0) {
-        const need = 30 - this.mag, take = Math.min(need, this.reserve);
-        this.mag += take; this.reserve -= take;
+      this.reloadT += dt;
+      // マガジンが収まった瞬間に弾数を更新（タクティカルは薬室の 1 発が残る）
+      if (!this.reloadSeated && this.reloadT >= RELOAD[this.reloadKind].seat) {
+        this.reloadSeated = true;
+        const cap = this.reloadKind === 'tactical' ? 31 : 30;
+        const keep = this.reloadKind === 'tactical' ? Math.min(1, this.mag) : 0;
+        const take = Math.min(cap - keep, this.reserve + (this.mag - keep));
+        this.reserve -= take - (this.mag - keep);
+        this.mag = keep + take;
       }
+      if (this.reloading <= 0) this.reloading = 0;
     } else if (this.alive && !sprint && !(this.prone && hs0 > 0.3)) {
       const auto = this.mode === 'auto' || this.touchAuto;
       if (this.burstLeft > 0 && this.fireCool <= 0) this.fireOne();
@@ -228,9 +242,11 @@ export class Player {
     let rx = 0, ry = (1 - ads) * 0.06, rz = (1 - ads) * -0.05;
     rx += this.kick * 0.06;
     if (sprint || (this.prone && hs > 0.3)) { p.add(new THREE.Vector3(0.06, -0.06, -0.02)); ry += 0.55; rx -= 0.25; rz += 0.3; }
-    if (this.reloading > 0) {
-      const r = this.reloading;
-      const k = Math.sin(Math.min(1, (2.4 - r) / 2.4) * Math.PI);
+    if (this.vmParts && this.vmParts.ok) {
+      if (this.reloading > 0) { poseReload(this.vmParts, this.reloadKind, this.reloadT); this.vmPosed = true; }
+      else if (this.vmPosed) { resetReload(this.vmParts); this.vmPosed = false; }
+    } else if (this.reloading > 0) {
+      const k = Math.sin(Math.min(1, this.reloadT / 2.2) * Math.PI);
       p.y -= 0.12 * k; rx -= 0.5 * k; rz += 0.6 * k;
     }
     vm.position.lerp(p, Math.min(1, dt * 20));

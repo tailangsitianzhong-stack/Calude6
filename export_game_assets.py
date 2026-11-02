@@ -251,11 +251,53 @@ def export_viewmodel(path, outpath, motions):
         new.data.transform(inv)          # ライフル原点・ライフル軸の座標系へ
         new.matrix_world = Matrix.Identity(4)
         out_objs.append(new)
+    out_objs = split_viewmodel(out_objs)
     ctx_select(out_objs, out_objs[0])
     bpy.ops.export_scene.gltf(
         filepath=outpath, export_format="GLB", use_selection=True, export_animations=False,
         export_image_format="JPEG", export_jpeg_quality=88, export_apply=False, export_yup=True)
     print("exported", outpath, os.path.getsize(outpath) // 1024, "KB")
+
+
+def split_viewmodel(objs):
+    """リロードで別々に動かせるよう、ライフル本体／マガジン／左腕／右腕に分ける。
+    腕は袖・手袋のつながった塊ごとに、ライフル座標の Y（+ が銃の左＝支持手側）で左右を判定する"""
+    pieces = {"ArmL": [], "ArmR": [], "Rifle": [], "Magazine": []}
+    for ob in objs:
+        ctx_select([ob], ob)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        is_rifle = "Rifle" in ob.name
+        if is_rifle:
+            bpy.ops.mesh.separate(type="MATERIAL")
+        else:
+            bpy.ops.mesh.separate(type="LOOSE")
+        bpy.ops.object.mode_set(mode="OBJECT")
+        parts = list(bpy.context.selected_objects)
+        for pt in parts:
+            me = pt.data
+            if not me.polygons:
+                continue
+            if is_rifle:
+                mats = {me.materials[p.material_index].name for p in me.polygons if me.materials}
+                key = "Magazine" if any("Magazine" in m or "_2" in m for m in mats) else "Rifle"
+            else:
+                cy = sum(v.co.y for v in me.vertices) / len(me.vertices)
+                key = "ArmL" if cy > 0.0 else "ArmR"
+            pieces[key].append(pt)
+    out = []
+    for key, arr in pieces.items():
+        if not arr:
+            continue
+        ctx_select(arr, arr[0])
+        if len(arr) > 1:
+            bpy.ops.object.join()
+        o = bpy.context.view_layer.objects.active
+        o.name = key
+        o.data.name = key
+        out.append(o)
+        print("  viewmodel piece", key, len(o.data.polygons), "faces")
+    return out
 
 
 def main():

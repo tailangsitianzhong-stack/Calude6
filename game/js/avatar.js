@@ -2,7 +2,10 @@
 import * as THREE from 'three';
 
 // Blender で焼き込んだ各アクションの速度（m/s）とジャンプの区切り（位相）
-const SPEED = { Walk_Rifle: 1.17 / (32 / 30), Run_Rifle: 2.4 / (20 / 30), Crouch_Rifle: 0.81 / (36 / 30), Prone_Rifle: 0.55 / (48 / 30) };
+const SPEED = {
+  Walk_Ready: 1.30 / (32 / 30), Jog_Rifle: 2.46 / (18 / 30), Sprint_Rifle: 3.12 / (17 / 30), Walk_Aim: 1.50 / (28 / 30),
+  Crouch_Rifle: 1.47 * 0.85 / (32 / 30), Prone_Rifle: 0.55 / (48 / 30),
+};
 const JUMP = { takeoff: 0.22, land: 0.72 };
 
 export class Avatar {
@@ -28,7 +31,7 @@ export class Avatar {
     this.jumping = false;
   }
 
-  play(name, fade = 0.2) {
+  play(name, fade = 0.2) {   // 姿勢の切り替えは 0.2 秒でなめらかに
     if (this.cur === name) return this.actions[name];
     const a = this.actions[name];
     if (!a) return null;
@@ -67,10 +70,13 @@ export class Avatar {
       let name, base;
       if (p.prone) { name = 'Prone_Rifle'; base = SPEED.Prone_Rifle; }
       else if (p.crouch) { name = 'Crouch_Rifle'; base = SPEED.Crouch_Rifle; }
-      else if (hs < 0.25) { name = 'Idle_Rifle'; base = 0; }
-      // 速度に合ったモーションを選ぶ（再生速度を上げすぎると脚の動きが崩れるため）
-      else if (sprint || hs > 1.4) { name = 'Run_Rifle'; base = SPEED.Run_Rifle; }
-      else { name = 'Walk_Rifle'; base = SPEED.Walk_Rifle; }
+      // Call of Duty 風：普段は腰だめ（胸の高さで前へ）、照準ボタンを押している間だけ目線で狙う
+      else if (p.ads > 0.5) {
+        if (hs < 0.25) { name = 'Idle_Rifle'; base = 0; } else { name = 'Walk_Aim'; base = SPEED.Walk_Aim; }
+      } else if (hs < 0.25) { name = 'Idle_Ready'; base = 0; }
+      else if (sprint) { name = 'Sprint_Rifle'; base = SPEED.Sprint_Rifle; }
+      else if (hs > 2.2) { name = 'Jog_Rifle'; base = SPEED.Jog_Rifle; }
+      else { name = 'Walk_Ready'; base = SPEED.Walk_Ready; }
       const a = this.play(name);
       if (a) a.timeScale = base ? sgn * Math.max(0.7, Math.min(1.1, hs / base)) : 1;   // 再生速度は最大 1.1 倍
     }

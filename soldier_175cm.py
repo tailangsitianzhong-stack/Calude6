@@ -850,13 +850,13 @@ def build_vest(M, torso_bvh):
         P = [[V(hits[i][j][0], lerp(hits[i][j][1], ycol[i], 0.45), hits[i][j][2]) for j in range(nv)]
              for i in range(nu)]
         D = [[dirv.copy() for _ in range(nv)] for _ in range(nu)]
-        solid_grid(bm, P, D, 0.008, 0.028)
+        solid_grid(bm, P, D, 0.008, 0.045)          # プレート＋キャリアで約 4.5cm
         # 外側の面位置（ポーチ配置用）
         sign = -1 if front else 1
         def surface(x, z):
             i = max(0, min(nu - 1, round((x / hw_full + 1) / 2 * (nu - 1))))
             j = max(0, min(nv - 1, round((z - z0) / (z1 - z0) * (nv - 1))))
-            return P[i][j].y + sign * 0.037
+            return P[i][j].y + sign * 0.054
         return surface
 
     info["front"] = plate(1.04, 1.41, True)
@@ -875,7 +875,7 @@ def build_vest(M, torso_bvh):
                 loc, _ = ray_outer(torso_bvh, V(0, 0.0, z), d)
                 P[-1].append(loc)
                 D[-1].append(d)
-        solid_grid(bm, P, D, 0.005, 0.014)
+        solid_grid(bm, P, D, 0.005, 0.02)           # カマーバンド（ソフトアーマー入り）
 
     # ショルダーストラップ
     for side in (1, -1):
@@ -890,7 +890,7 @@ def build_vest(M, torso_bvh):
                 loc, _ = ray_outer(torso_bvh, V(x, 0.0, 1.30), d)
                 P[-1].append(loc)
                 D[-1].append(d)
-        solid_grid(bm, P, D, 0.005, 0.013)
+        solid_grid(bm, P, D, 0.006, 0.02)           # パッド入りショルダーストラップ
 
     ob = make_obj("PlateCarrier", bm, [M["vest"]], mods=[("SUBSURF", dict(levels=1, render_levels=2))])
     return ob, info
@@ -903,23 +903,23 @@ def build_pouches(M, torso_bvh, info):
     # マガジンポーチ ×3 + マガジン
     for x in (-0.08, 0.0, 0.08):
         y = min(yf(x, 1.10), yf(x, 1.19))
-        box(bm, V(x, y - 0.024, 1.145), (0.074, 0.046, 0.125), mat=G)
-        box(bm, V(x, y - 0.024, 1.215), (0.064, 0.024, 0.05), mat=P)
-        box(bm, V(x, y - 0.0485, 1.165), (0.05, 0.004, 0.012), mat=G)     # ショックコード留め
+        box(bm, V(x, y - 0.027, 1.145), (0.076, 0.054, 0.13), mat=G)
+        box(bm, V(x, y - 0.027, 1.22), (0.064, 0.026, 0.05), mat=P)
+        box(bm, V(x, y - 0.0555, 1.165), (0.05, 0.006, 0.014), mat=G)     # ショックコード留め
     # アドミンポーチ（胸上部）
     y = min(yf(-0.09, 1.29), yf(0.0, 1.29), yf(0.09, 1.29))
-    box(bm, V(0, y - 0.016, 1.29), (0.19, 0.032, 0.085), mat=G)
-    box(bm, V(0, y - 0.033, 1.31), (0.09, 0.004, 0.045), mat=G)           # パッチ用ベルクロ
+    box(bm, V(0, y - 0.021, 1.29), (0.19, 0.042, 0.088), mat=G)
+    box(bm, V(0, y - 0.0435, 1.31), (0.09, 0.004, 0.045), mat=G)          # パッチ用ベルクロ
     # 背面：無線機ポーチ + アンテナ
     yb = info["back"]
     y = max(yb(0.05, 1.2), yb(0.12, 1.2), yb(0.05, 1.33), yb(0.12, 1.33))
-    box(bm, V(0.085, y + 0.024, 1.27), (0.072, 0.048, 0.15), mat=G)
-    box(bm, V(0.085, y + 0.024, 1.355), (0.05, 0.035, 0.03), mat=P)
+    box(bm, V(0.085, y + 0.031, 1.27), (0.075, 0.062, 0.155), mat=G)
+    box(bm, V(0.085, y + 0.031, 1.36), (0.05, 0.04, 0.03), mat=P)
     ax = V(0.18, 0.12, 1.0).normalized()
-    cylinder(bm, V(0.095, y + 0.024, 1.37) + ax * 0.17, ax, 0.0045, 0.0028, 0.34, segs=12, mat=P)
+    cylinder(bm, V(0.095, y + 0.031, 1.375) + ax * 0.17, ax, 0.0045, 0.0028, 0.34, segs=12, mat=P)
     # 背面：ハイドレーション（中央）
     y = max(yb(-0.08, 1.12), yb(0.0, 1.12), yb(-0.08, 1.28), yb(0.0, 1.28))
-    box(bm, V(-0.04, y + 0.02, 1.2), (0.09, 0.04, 0.2), mat=G)
+    box(bm, V(-0.04, y + 0.03, 1.2), (0.1, 0.06, 0.22), mat=G)
     # ドラッグハンドル
     box(bm, V(0.0, yb(0.0, 1.42) - 0.03, 1.418), (0.09, 0.02, 0.016), mat=1)
     ob = make_obj("Pouches", bm, [M["gear"], M["polymer"]],
@@ -940,7 +940,7 @@ def build_belt(M, torso_bvh):
             loc, _ = ray_outer(torso_bvh, V(0, 0.0, z), d)
             P[-1].append(loc)
             D[-1].append(d)
-    solid_grid(bm, P, D, 0.004, 0.012, wrap=True)
+    solid_grid(bm, P, D, 0.004, 0.022, wrap=True)    # パッド入り戦闘ベルト
     belt = make_obj("Belt", bm, [M["webbing"]], mods=[("SUBSURF", dict(levels=1, render_levels=2))])
 
     hw = bmesh.new()
@@ -982,7 +982,7 @@ def build_kneepads(M, leg_bvh):
                 loc, _ = ray_outer(leg_bvh, V(cx, cy, z), d, 0.085)
                 P[-1].append(loc)
                 D[-1].append(d)
-        solid_grid(bm, P, D, 0.003, 0.015, mat=0)
+        solid_grid(bm, P, D, 0.003, 0.022, mat=0)
         for z0 in (0.46, 0.535):  # ストラップ
             nu2 = 28
             P, D = [], []
@@ -1545,7 +1545,7 @@ def sling_back_matrix():
     X = V(0.55, 0.0, 0.83).normalized()
     Yr = V(0.0, 1.0, 0.0)
     Z = X.cross(Yr)
-    mid = V(0.0, 0.265, 1.12)
+    mid = V(0.0, 0.30, 1.12)
     o = mid - X * 0.5
     return Matrix(((X.x, Yr.x, Z.x, o.x), (X.y, Yr.y, Z.y, o.y), (X.z, Yr.z, Z.z, o.z), (0, 0, 0, 1)))
 
