@@ -71,7 +71,7 @@ export class Player {
   update(dt) {
     this.time += dt;
     const k = this.keys;
-    const sprint = (k.ShiftLeft || k.ShiftRight) && !this.crouch && k.KeyW && this.ads < 0.2 && this.reloading <= 0;
+    const sprint = (((k.ShiftLeft || k.ShiftRight) && k.KeyW) || this.touchSprint) && !this.crouch && this.ads < 0.2 && this.reloading <= 0;
     // ADS
     const adsTarget = this.adsHeld && !sprint && this.reloading <= 0 && this.alive ? 1 : 0;
     this.ads += (adsTarget - this.ads) * Math.min(1, dt * 12);
@@ -88,7 +88,11 @@ export class Player {
     const wish = new THREE.Vector3();
     if (k.KeyW) wish.add(fwd); if (k.KeyS) wish.sub(fwd);
     if (k.KeyD) wish.add(right); if (k.KeyA) wish.sub(right);
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed);
+    if (this.moveInput) {            // タッチのアナログスティック（y は画面下向きが正）
+      wish.addScaledVector(fwd, -this.moveInput.y).addScaledVector(right, this.moveInput.x);
+    }
+    if (wish.lengthSq() > 1) wish.normalize();
+    wish.multiplyScalar(speed);
     const accel = this.onGround ? 14 : 3;
     this.vel.x += (wish.x - this.vel.x) * Math.min(1, dt * accel);
     this.vel.z += (wish.z - this.vel.z) * Math.min(1, dt * accel);

@@ -102,3 +102,55 @@ button:focus-visible { outline: 2px solid var(--dust); outline-offset: 3px; }
   .panel { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { #banner, #load-bar { transition: none; } }
+
+/* ---------------- タッチ操作（スマホ横画面） */
+#touch-ui { display: none; }
+body.touch #touch-ui { display: block; position: absolute; inset: 0; pointer-events: auto; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#t-stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 2px solid rgba(231, 224, 207, 0.35); background: rgba(15, 15, 13, 0.25); opacity: 0; pointer-events: none;
+  left: 18%; top: 70%; transition: opacity 0.12s; }
+#t-stick.on { opacity: 1; }
+#t-stick.sprint { border-color: var(--rust); }
+#t-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+  background: rgba(231, 224, 207, 0.55); }
+body.touch:not(.stick-used) #t-stick { opacity: 0.45; }
+#touch-ui button { position: absolute; border-radius: 50%; padding: 0; font: 700 13px var(--display); letter-spacing: 0.04em;
+  color: var(--paper); background: rgba(15, 15, 13, 0.45); border: 2px solid rgba(231, 224, 207, 0.4);
+  display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.15; touch-action: none; }
+#touch-ui button.down { background: rgba(231, 224, 207, 0.35); }
+#touch-ui button.active { border-color: var(--rust); background: rgba(210, 87, 58, 0.35); }
+#t-fire { width: 96px; height: 96px; right: calc(22px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  background: rgba(210, 87, 58, 0.55) !important; border-color: var(--rust) !important; font-size: 16px; }
+#t-fire.down { background: rgba(210, 87, 58, 0.85) !important; }
+#t-ads { width: 62px; height: 62px; right: calc(130px + env(safe-area-inset-right, 0px)); bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
+#t-jump { width: 56px; height: 56px; right: calc(134px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px)); }
+#t-crouch { width: 56px; height: 56px; right: calc(204px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); font-size: 10px !important; white-space: nowrap; }
+#t-reload { width: 56px; height: 56px; right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(138px + env(safe-area-inset-bottom, 0px)); }
+#t-mode { width: 64px; height: 30px; border-radius: 15px !important; right: calc(104px + env(safe-area-inset-right, 0px));
+  top: calc(14px + env(safe-area-inset-top, 0px)); font-size: 10px !important; }
+#t-pause { width: 40px; height: 40px; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(10px + env(safe-area-inset-top, 0px)); font-size: 14px !important; }
+/* タッチ時の HUD 配置：左下と右下はスティックとボタンに譲る */
+body.touch .hud-tl { gap: 14px; }
+body.touch .stat b { font-size: 22px; }
+body.touch .hud-bl { top: calc(64px + env(safe-area-inset-top, 0px)); bottom: auto; width: 150px; }
+body.touch .hp-row b { font-size: 20px; }
+body.touch .hud-br { top: calc(48px + env(safe-area-inset-top, 0px)); bottom: auto; right: max(110px, env(safe-area-inset-right, 0px)); }
+body.touch .ammo b { font-size: 34px; }
+body.touch .ammo span, body.touch .ammo em { font-size: 18px; }
+body.touch .weapon { font-size: 11px; }
+body.touch #banner { font-size: 18px; }
+#rotate { display: none; }
+@media (orientation: portrait) {
+  body.touch #rotate { display: flex; position: fixed; inset: 0; z-index: 50; align-items: center; justify-content: center;
+    background: var(--ink); color: var(--paper); font: 700 18px var(--display); letter-spacing: 0.08em; text-align: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  body.touch #rotate p::before { content: '⟲'; display: block; font-size: 48px; margin-bottom: 12px; color: var(--dust); }
+}
+@media (max-height: 480px) {
+  h1 { font-size: 46px; }
+  .panel { gap: 10px; }
+  .lede { font-size: 12px; line-height: 1.6; }
+  .keys { display: none; }
+  button { padding: 9px 18px; font-size: 14px; }
+}

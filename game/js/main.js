@@ -7,6 +7,7 @@ import { Effects } from './effects.js';
 import { Audio } from './audio.js';
 import { Player } from './player.js';
 import { EnemyManager } from './enemies.js';
+import { isTouchDevice, setupTouch } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -19,7 +20,10 @@ const ui = {
 // ---------------------------------------------------------------- レンダラー
 const canvas = $('game');
 // ?low で軽量表示（影なし・低解像度）
-const LOW = new URLSearchParams(location.search).has('low');
+const TOUCH = isTouchDevice();
+const QS = new URLSearchParams(location.search);
+// スマホは既定で軽量表示（?high で通常）
+const LOW = QS.has('low') || (TOUCH && !QS.has('high'));
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: 'high-performance' });
 renderer.setPixelRatio(LOW ? 0.75 : Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -113,8 +117,10 @@ async function load() {
   audio = new Audio();
   progress(0.55, '兵士モデルを読み込み中…');
   const loader = new GLTFLoader();
-  const loadGLB = (url, w0, w1) => new Promise((res, rej) => loader.load(url, res,
-    (e) => { if (e.total) progress(w0 + (w1 - w0) * e.loaded / e.total); }, rej));
+  // テクスチャは <img> で読む（fetch(blob:) を禁止する配信環境でも動くように）
+  loader.register((parser) => { parser.textureLoader = new THREE.TextureLoader(parser.options.manager); return { name: 'img_textures' }; });
+  const loadGLB = (url, w0, w1) => url.endsWith('.json') ? loadEmbedded(loader, url, (p) => progress(w0 + (w1 - w0) * p))
+    : new Promise((res, rej) => loader.load(url, res, (e) => { if (e.total) progress(w0 + (w1 - w0) * e.loaded / e.total); }, rej));
   // 配信先が .glb を扱えない場合は埋め込み glTF（.json）を使う（window.__ASSET_EXT で指定）
   const ext = window.__ASSET_EXT || '.glb';
   const [soldier, vm] = await Promise.all([loadGLB('assets/soldier' + ext, 0.55, 0.9), loadGLB('assets/viewmodel' + ext, 0.9, 0.98)]);
@@ -145,7 +151,52 @@ async function load() {
   ui.loading.hidden = true;
   ui.menu.hidden = false;
   state.mode = 'menu';
-  if (matchMedia('(pointer: coarse)').matches) ui.touchNote.hidden = false;
+  if (TOUCH) {
+    ui.touchNote.hidden = false;
+    touch = setupTouch({
+      root: document.getElementById('touch-ui'), getPlayer: () => player,
+      isPlaying: () => state.mode === 'play', onPause: pauseGame,
+    });
+  }
+}
+
+// 埋め込み glTF（.json）：data: URI を fetch せずに自前でデコードし、GLB に組み立てて解析する
+async function loadEmbedded(loader, url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} を取得できません（${res.status}）`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  let text;
+  if (res.body && total) {
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length;
+      onProgress(Math.min(1, got / total));
+    }
+    text = new TextDecoder().decode(await new Blob(chunks).arrayBuffer());
+  } else {
+    text = await res.text();
+  }
+  const json = JSON.parse(text);
+  const uri = json.buffers[0].uri;
+  const b64 = uri.slice(uri.indexOf(',') + 1);
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  delete json.buffers[0].uri;
+  json.buffers[0].byteLength = bin.length;
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+  const jpad = (4 - (jsonBytes.length % 4)) % 4, bpad = (4 - (bin.length % 4)) % 4;
+  const jl = jsonBytes.length + jpad, bl = bin.length + bpad;
+  const glb = new Uint8Array(12 + 8 + jl + 8 + bl);
+  const dv = new DataView(glb.buffer);
+  dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, glb.length, true);
+  dv.setUint32(12, jl, true); dv.setUint32(16, 0x4E4F534A, true);
+  glb.set(jsonBytes, 20); glb.fill(0x20, 20 + jsonBytes.length, 20 + jl);
+  dv.setUint32(20 + jl, bl, true); dv.setUint32(24 + jl, 0x004E4942, true);
+  glb.set(bin, 28 + jl);
+  return new Promise((ok, ng) => loader.parse(glb.buffer, '', ok, ng));
 }
 
 // ---------------------------------------------------------------- 射撃判定
@@ -205,19 +256,31 @@ document.addEventListener('mouseup', (e) => {
 });
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+let touch = null;
+function pauseGame() {
+  if (state.mode !== 'play') return;
+  state.mode = 'paused';
+  ui.pause.hidden = false;
+  player.trigger = false; player.adsHeld = false;
+  for (const k in player.keys) player.keys[k] = false;
+  touch?.reset();
+}
+
 function lock() {
+  if (TOUCH) {
+    // スマホ：全画面＋横向き固定（対応していれば）
+    const el = document.documentElement;
+    try { const r = el.requestFullscreen?.({ navigationUI: 'hide' }); r?.catch?.(() => {}); } catch (_) { /* 非対応 */ }
+    try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch (_) { /* 非対応 */ }
+    return;
+  }
   try {
     const r = canvas.requestPointerLock();
     if (r && r.catch) r.catch(() => {});
   } catch (_) { /* ポインタロック不可の環境 */ }
 }
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== canvas && state.mode === 'play') {
-    state.mode = 'paused';
-    ui.pause.hidden = false;
-    player.trigger = false; player.adsHeld = false;
-    for (const k in player.keys) player.keys[k] = false;
-  }
+  if (!TOUCH && document.pointerLockElement !== canvas) pauseGame();
 });
 
 $('btn-start').addEventListener('click', () => startGame(false));
@@ -238,6 +301,7 @@ function startGame(practice) {
   player.vel.set(0, 0, 0);
   player.yaw = 0; player.pitch = 0;
   ui.menu.hidden = true; ui.over.hidden = true; ui.pause.hidden = true; ui.hud.hidden = false;
+  touch?.reset();
   state.mode = 'play';
   if (practice) {
     // 見学モード：敵は撃ってこない。周囲に配置して観察できる
@@ -374,6 +438,7 @@ Player.prototype.damage = function (amount, fromPos) {
 function gameOver() {
   state.mode = 'over';
   document.exitPointerLock?.();
+  touch?.reset();
   ui.over.hidden = false;
   const m = Math.floor(state.time / 60), s = Math.floor(state.time % 60);
   ui.overStats.innerHTML = `<div><span>到達ウェーブ</span><b>${state.wave}</b></div><div><span>撃破数</span><b>${state.kills}</b></div><div><span>生存時間</span><b>${m}:${String(s).padStart(2, '0')}</b></div>`;
@@ -381,6 +446,7 @@ function gameOver() {
 
 // デバッグ・テスト用
 window.__game = {
+  get touch() { return touch; },
   state, get player() { return player; }, get enemies() { return enemies; }, camera, scene, startGame,
   simulate(sec) { for (let t = 0; t < sec; t += 1 / 30) update(1 / 30); },
 };

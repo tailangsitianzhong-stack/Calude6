@@ -52,5 +52,7 @@ cd game && python3 -m http.server 8000   # → http://localhost:8000/
 - 一人称の腕と銃：`game/assets/viewmodel.glb`（ゴースト版の袖・手袋 + M16A2）
 - 街：起動時に手続き生成（3×3 街区、中央広場、廃墟街区、外周の建物列）
 - 操作：WASD / マウス / 左クリック射撃 / 右クリック照準 / Shift 走る / C しゃがむ / Space ジャンプ / R リロード / B 射撃モード
-- `?low` を付けると影なし・低解像度で軽く動きます
+- スマホ（横画面）はタッチ操作：左側で移動スティック、右側スワイプで視点、射撃・照準・装填・しゃがむ・跳ぶボタン
+- `?low` で影なし・低解像度（スマホは既定でこちら。`?high` で通常表示）
+- `.glb` を配信できないホスティングでは、埋め込み glTF（`.json`）を置いて `window.__ASSET_EXT = ".json"` を指定
 - アセットの再書き出し：`blender --background --python export_game_assets.py -- soldier_175cm.blend soldier_175cm_ghost.blend game/assets`
