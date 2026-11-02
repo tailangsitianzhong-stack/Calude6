@@ -68,10 +68,11 @@ export class Avatar {
       if (p.prone) { name = 'Prone_Rifle'; base = SPEED.Prone_Rifle; }
       else if (p.crouch) { name = 'Crouch_Rifle'; base = SPEED.Crouch_Rifle; }
       else if (hs < 0.25) { name = 'Idle_Rifle'; base = 0; }
-      else if (sprint || hs > 4.6) { name = 'Run_Rifle'; base = SPEED.Run_Rifle; }
+      // 速度に合ったモーションを選ぶ（再生速度を上げすぎると脚の動きが崩れるため）
+      else if (sprint || hs > 2.0) { name = 'Run_Rifle'; base = SPEED.Run_Rifle; }
       else { name = 'Walk_Rifle'; base = SPEED.Walk_Rifle; }
       const a = this.play(name);
-      if (a) a.timeScale = base ? sgn * Math.min(2, hs / base) : 1;
+      if (a) a.timeScale = base ? sgn * Math.max(0.7, Math.min(1.5, hs / base)) : 1;
     }
     this.wasGround = p.onGround;
     this.mixer.update(dt);

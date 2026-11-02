@@ -97,7 +97,8 @@ class Enemy {
     this.actions.Death.setLoop(THREE.LoopOnce, 1);
     this.actions.Death.clampWhenFinished = true;
     this.bones = {};
-    root.traverse((o) => { if (o.isBone) this.bones[o.name] = o; if (o.name === 'Rifle') this.rifle = o; });
+    // glTF 読み込み時に名前の「.」は除かれる（thigh.L → thighL）ので、両方の名前で引けるようにする
+    root.traverse((o) => { if (o.isBone) { this.bones[o.name] = o; } if (o.name === 'Rifle') this.rifle = o; });
     this.cur = null;
     this.play('Walk_Rifle', 0);
     this.health = 100;
@@ -133,7 +134,7 @@ class Enemy {
   }
 
   bonePos(name, off = null) {
-    const b = this.bones[name];
+    const b = this.bones[name] || this.bones[name.replace('.', '')];
     if (!b) return this.root.position.clone();
     return off ? b.localToWorld(off.clone()) : b.getWorldPosition(new THREE.Vector3());
   }
