@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>瓦礫の街</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=Noto+Sans+JP:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+<canvas id="game"></canvas>
+
+<div id="hud" hidden>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"></div>
+  <div id="vignette"></div>
+  <div id="dmg-dir"></div>
+  <div id="banner"></div>
+  <div class="hud-tl">
+    <div class="stat"><span>ウェーブ</span><b id="wave">0</b></div>
+    <div class="stat"><span>撃破</span><b id="kills">0</b></div>
+    <div class="stat"><span>残り敵兵</span><b id="left">0</b></div>
+  </div>
+  <div class="hud-bl">
+    <div class="hp"><div id="hp-fill"></div></div>
+    <div class="hp-row"><b id="hp-text">100</b><span>体力</span></div>
+  </div>
+  <div class="hud-br">
+    <div class="ammo"><b id="ammo">30</b><span>/</span><em id="reserve">210</em></div>
+    <div class="weapon">M16A2 · <span id="mode">SEMI</span></div>
+    <div id="reload-tip" hidden></div>
+  </div>
+</div>
+
+<section id="loading" class="screen">
+  <div class="panel">
+    <p class="eyebrow">LOADING</p>
+    <h1>瓦礫の街</h1>
+    <div class="bar"><div id="load-bar"></div></div>
+    <p id="load-text">準備中…</p>
+  </div>
+</section>
+
+<section id="menu" class="screen" hidden>
+  <div class="panel">
+    <p class="eyebrow">市街戦 · 一人称シューター</p>
+    <h1>瓦礫の街</h1>
+    <p class="lede">砲撃で崩れた旧市街。ガスマスクの敵兵が通りを巡回している。広場を拠点に、波状に押し寄せる敵を迎え撃て。</p>
+    <div class="buttons">
+      <button id="btn-start" class="primary">出撃する</button>
+      <button id="btn-practice">見学モード</button>
+    </div>
+    <p id="touch-note" class="note" hidden>マウスとキーボードのある PC ブラウザで遊んでください。この画面では街と兵士の様子を眺められます。</p>
+    <dl class="keys">
+      <div><dt>W A S D</dt><dd>移動</dd></div>
+      <div><dt>マウス</dt><dd>視点</dd></div>
+      <div><dt>左クリック</dt><dd>射撃</dd></div>
+      <div><dt>右クリック</dt><dd>照準（サイト）</dd></div>
+      <div><dt>Shift</dt><dd>走る</dd></div>
+      <div><dt>C / Ctrl</dt><dd>しゃがむ</dd></div>
+      <div><dt>Space</dt><dd>ジャンプ</dd></div>
+      <div><dt>R</dt><dd>リロード</dd></div>
+      <div><dt>B</dt><dd>単発 ⇄ 3 点バースト</dd></div>
+      <div><dt>Esc</dt><dd>一時停止</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section id="pause" class="screen dim" hidden>
+  <div class="panel small">
+    <h2>一時停止</h2>
+    <div class="buttons">
+      <button id="btn-resume" class="primary">再開する</button>
+      <button id="btn-menu">メニューへ</button>
+    </div>
+  </div>
+</section>
+
+<section id="over" class="screen dim" hidden>
+  <div class="panel small">
+    <p class="eyebrow">KIA</p>
+    <h2>戦死</h2>
+    <div id="over-stats" class="stats"></div>
+    <div class="buttons">
+      <button id="btn-restart" class="primary">もう一度</button>
+    </div>
+  </div>
+</section>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

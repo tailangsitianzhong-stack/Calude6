@@ -39,3 +39,18 @@ blender soldier_175cm.blend --background --python soldier_motions.py -- --save s
 ```
 
 GUI では Scripting タブで `soldier_175cm.py` を開いて実行（末尾の `DEFAULT_VARIANT` で版を選択）。
+
+## ゲーム「瓦礫の街」（`game/`）
+
+Three.js（CDN）で動くブラウザ用の一人称シューター。静的ファイルなので任意の Web サーバーに置けば動きます。
+
+```bash
+cd game && python3 -m http.server 8000   # → http://localhost:8000/
+```
+
+- 敵兵：`game/assets/soldier.glb`（ガスマスク版。ポリゴン削減・テクスチャ焼き込み・10 アクション）
+- 一人称の腕と銃：`game/assets/viewmodel.glb`（ゴースト版の袖・手袋 + M16A2）
+- 街：起動時に手続き生成（3×3 街区、中央広場、廃墟街区、外周の建物列）
+- 操作：WASD / マウス / 左クリック射撃 / 右クリック照準 / Shift 走る / C しゃがむ / Space ジャンプ / R リロード / B 射撃モード
+- `?low` を付けると影なし・低解像度で軽く動きます
+- アセットの再書き出し：`blender --background --python export_game_assets.py -- soldier_175cm.blend soldier_175cm_ghost.blend game/assets`

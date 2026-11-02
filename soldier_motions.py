@@ -270,8 +270,10 @@ def foot_state(rest, s, phi, P):
     x = P["foot_x"] * s
     a_rest, heel_rest, ball_rest = rs["ankle"], rs["heel"], rs["ball"]
 
+    fy = P.get("foot_y", {}).get(s, 0.0)
+
     def place(flat_y, pitch, pivot):
-        A0 = V(x, flat_y, a_rest.z)
+        A0 = V(x, flat_y + fy, a_rest.z)
         Rf = Rzy @ Rx(-pitch)
         if pivot == "heel":
             P0 = A0 + Rzy @ (heel_rest - a_rest)
@@ -421,6 +423,12 @@ GAITS = {
                 arm_swing=34, arm_fwd=12, elbow=82, elbow_amp=12, abd=9, run=True,
                 lift_fn=lambda t: math.sin(math.pi * clamp(t, 0, 1) ** 0.62) ** 1.1,
                 swing_dorsi=14),
+    # その場で構えて立つ（呼吸による微小な上下動のみ）
+    "Stand": dict(T=60, stride=0.0, duty=1.0, strike_off=0.0, foot_x=0.13, drop=0.035, bob=0.004,
+                  sway=0.004, yaw=0.8, roll=0.5, lean=5.0, chest_yaw=0.5, lift=0.0,
+                  pitch_strike=0, pitch_off=0, heel_rock=0.1, heel_off=0.9, head_pitch=0.0,
+                  arm_swing=0, arm_fwd=5, elbow=20, elbow_amp=0, abd=12, toe_out=18,
+                  foot_y={1: -0.16, -1: 0.12}),
     "Crouch": dict(T=36, stride=0.95, duty=0.64, strike_off=0.25, foot_x=0.13, drop=0.25, bob=0.012,
                    sway=0.03, yaw=4.0, roll=3.0, lean=24.0, chest_yaw=4.0, lift=0.05,
                    pitch_strike=12, pitch_off=28, heel_rock=0.16, heel_off=0.55, head_pitch=-12.0,
@@ -434,6 +442,8 @@ RIFLE_STYLE = {
     "Run": dict(style="ready", pocket=V(-0.10, -0.18, 1.33), pitch=46, yaw=32, cant=16, blade=-20,
                 head_pitch=4.0, stride_scale=1.0, drop_add=0.0, lean_add=2.0),
     # 構えながら前進：照準線に目を合わせ、銃は水平に安定
+    "Stand": dict(style="aim", pocket=V(-0.105, -0.155, 1.395), head_pitch=0.0, blade=-32,
+                  stride_scale=1.0, drop_add=0.0, lean_add=0.0),
     "Crouch": dict(style="aim", pocket=V(-0.105, -0.155, 1.395), head_pitch=0.0, blade=-30,
                    stride_scale=0.85, drop_add=0.0, lean_add=-6.0),
 }
@@ -673,6 +683,52 @@ def prone_pose(rest, phi, rifle):
 
 
 # ---------------------------------------------------------------------------
+# 被弾して倒れる（膝が崩れ → 前のめりに倒れる。銃は手から離れて地面へ）
+# ---------------------------------------------------------------------------
+
+def blend_pose(rest, a, b, t):
+    p = Pose(rest)
+    for n in rest.b:
+        p.Q[n] = slerp_m(a.Q[n], b.Q[n], t)
+    p.hips_pos = a.hips_pos.lerp(b.hips_pos, t)
+    if a.weapon is not None and b.weapon is not None:
+        R = slerp_m(a.weapon.to_3x3(), b.weapon.to_3x3(), t)
+        p.weapon = mat4(R, a.weapon.translation.lerp(b.weapon.translation, t))
+    return p
+
+
+DEATH_T = 40
+
+
+def death_pose(rest, phi):
+    A = gait_pose(rest, "Stand", 0.0, True)
+    K = gait_pose(rest, "Crouch", 0.12, False)            # 膝が崩れた中間姿勢
+    K.hips_pos = K.hips_pos + V(0, 0.05, -0.12)
+    K.Q["chest"] = Rx(rad(35)) @ K.Q["chest"]
+    K.Q["head"] = Rx(rad(25)) @ K.Q["head"]
+    B = prone_pose(rest, 0.25, False)
+    B.hips_pos = B.hips_pos + V(0, -0.62, -0.02)            # 足の位置から前へ倒れ込む
+    B.Q["head"] = Rz(rad(70)) @ Rx(rad(80))                 # 顔を横に向けて地面へ
+    B.Q["neck"] = slerp_m(B.Q["chest"], B.Q["head"], 0.5)
+    ground = mat4(Rz(rad(25)) @ Matrix(((0, 0, 1), (-1, 0, 0), (0, -1, 0))), V(0.45, -0.75, 0.035))
+    K.weapon = A.weapon
+    B.weapon = ground
+    if phi < 0.35:
+        t = smooth(phi / 0.35)
+        P = blend_pose(rest, A, K, t)
+    else:
+        t = ((phi - 0.35) / 0.65) ** 1.7                     # 重力で加速しながら倒れる
+        P = blend_pose(rest, K, B, t)
+        if t > 0.92:                                        # 着地の小さなバウンド
+            P.hips_pos.z += 0.02 * math.sin(math.pi * (t - 0.92) / 0.08)
+    # 銃はすぐに手を離れ、重力で落ちる
+    tw = clamp((phi - 0.05) / 0.5, 0, 1) ** 2
+    R = slerp_m(A.weapon.to_3x3(), ground.to_3x3(), tw)
+    P.weapon = mat4(R, A.weapon.translation.lerp(ground.translation, tw))
+    return P
+
+
+# ---------------------------------------------------------------------------
 # 焼き込み
 # ---------------------------------------------------------------------------
 
@@ -689,7 +745,7 @@ def action_fcurves(act):
     return out
 
 
-def bake(arm, rest, name, T, stride, fn):
+def bake(arm, rest, name, T, stride, fn, loop=True):
     act = bpy.data.actions.get(name)
     if act:
         bpy.data.actions.remove(act)
@@ -704,7 +760,7 @@ def bake(arm, rest, name, T, stride, fn):
         pb.scale = (1, 1, 1)
     prev = {}
     for f in range(T + 1):
-        phi = (f % T) / T
+        phi = (f % T) / T if loop else f / T
         pose = fn(phi)
         M = pose.matrices()
         for n in rest.order:
@@ -730,7 +786,7 @@ def bake(arm, rest, name, T, stride, fn):
             fc.extrapolation = "LINEAR"
             for k in fc.keyframe_points:
                 k.interpolation = "LINEAR"
-        else:
+        elif loop:
             fc.modifiers.new("CYCLES")
     act.use_frame_range = True
     act.frame_start, act.frame_end = 0, T
@@ -759,6 +815,10 @@ def make_all(arm=None, default="Walk_Rifle"):
         act_name = "Prone" + ("_Rifle" if rifle else "")
         made[act_name] = (bake(arm, rest, act_name, PRONE["T"], PRONE["stride"],
                                lambda phi, r=rifle: prone_pose(rest, phi, r)), PRONE["T"])
+    made["Idle_Rifle"] = (bake(arm, rest, "Idle_Rifle", GAITS["Stand"]["T"], 0.0,
+                               lambda phi: gait_pose(rest, "Stand", phi, True)), GAITS["Stand"]["T"])
+    made["Death"] = (bake(arm, rest, "Death", DEATH_T, 0.0, lambda phi: death_pose(rest, phi), loop=False),
+                     DEATH_T)
     act, T = made[default]
     arm.animation_data.action = act
     scene.frame_start, scene.frame_end = 0, T * 4 - 1
