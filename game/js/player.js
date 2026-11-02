@@ -1,7 +1,7 @@
 // 一人称プレイヤー：移動・衝突・視点・武器（M16A2：単発／3 点バースト）
 import * as THREE from 'three';
 
-const STAND_EYE = 1.62, CROUCH_EYE = 1.08;
+const STAND_EYE = 1.62, CROUCH_EYE = 1.08, PRONE_EYE = 0.38;
 const VM_BASE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
 
 export class Player {
@@ -15,13 +15,14 @@ export class Player {
     this.yaw = 0; this.pitch = 0;
     this.eye = STAND_EYE;
     this.onGround = true;
-    this.crouch = false;
+    this.stance = 0;                  // 0=立ち 1=しゃがみ 2=伏せ（匍匐）
     this.keys = {};
     this.health = 100;
     this.alive = true;
     this.lastHurt = -10;
     this.mag = 30; this.reserve = 210;
-    this.mode = 'semi';               // semi | burst
+    this.mode = 'semi';               // semi | burst | auto
+    this.touchAuto = false;           // タッチ：射撃ボタン長押しで連射
     this.burstLeft = 0;
     this.fireCool = 0;
     this.reloading = 0;
@@ -50,7 +51,21 @@ export class Player {
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch - dy * sens));
   }
 
-  toggleMode() { this.mode = this.mode === 'semi' ? 'burst' : 'semi'; this.audio.click(1200, 0.03, 0.3); }
+  get crouch() { return this.stance > 0; }
+  set crouch(v) { this.stance = v ? 1 : 0; }
+  get prone() { return this.stance === 2; }
+  // 立ち → しゃがみ → 伏せ → 立ち …
+  cycleStance() {
+    const next = (this.stance + 1) % 3;
+    if (next === 0 && this.world.ceiling(this.pos, 0.3, this.pos.y + 0.6) < this.pos.y + STAND_EYE + 0.15) return;
+    this.stance = next;
+  }
+
+  toggleMode() {
+    const order = ['semi', 'burst', 'auto'];
+    this.mode = order[(order.indexOf(this.mode) + 1) % order.length];
+    this.audio.click(1200, 0.03, 0.3);
+  }
 
   reload() {
     if (this.reloading > 0 || this.mag === 30 || this.reserve <= 0 || !this.alive) return;
@@ -76,11 +91,11 @@ export class Player {
     const adsTarget = this.adsHeld && !sprint && this.reloading <= 0 && this.alive ? 1 : 0;
     this.ads += (adsTarget - this.ads) * Math.min(1, dt * 12);
     // 姿勢
-    const eyeT = this.crouch ? CROUCH_EYE : STAND_EYE;
+    const eyeT = this.stance === 2 ? PRONE_EYE : this.stance === 1 ? CROUCH_EYE : STAND_EYE;
     let ceil = this.world.ceiling(this.pos, 0.3, this.pos.y + 0.5);
-    if (!this.crouch || this.pos.y + STAND_EYE + 0.15 < ceil) this.eye += (eyeT - this.eye) * Math.min(1, dt * 10);
+    if (eyeT <= this.eye || this.pos.y + eyeT + 0.15 < ceil) this.eye += (eyeT - this.eye) * Math.min(1, dt * (this.stance === 2 ? 5 : 10));
     // 移動
-    let speed = this.crouch ? 2.0 : sprint ? 6.4 : 4.1;
+    let speed = this.stance === 2 ? 0.9 : this.stance === 1 ? 2.0 : sprint ? 6.4 : 4.1;
     speed *= 1 - this.ads * 0.42;
     if (!this.alive) speed = 0;
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -125,14 +140,17 @@ export class Player {
 
     // 射撃
     this.fireCool -= dt;
+    const hs0 = Math.hypot(this.vel.x, this.vel.z);
     if (this.reloading > 0) {
       this.reloading -= dt;
       if (this.reloading <= 0) {
         const need = 30 - this.mag, take = Math.min(need, this.reserve);
         this.mag += take; this.reserve -= take;
       }
-    } else if (this.alive && !sprint) {
+    } else if (this.alive && !sprint && !(this.prone && hs0 > 0.3)) {
+      const auto = this.mode === 'auto' || this.touchAuto;
       if (this.burstLeft > 0 && this.fireCool <= 0) this.fireOne();
+      else if (auto && this.trigger && this.fireCool <= 0 && this.mag > 0) { this.burstLeft = 1; this.fireOne(true); }
       else if (this.trigger && this.fireCool <= 0 && this.burstLeft === 0 && this.mag > 0 && !this.triggerLatched) {
         this.triggerLatched = true;
         this.burstLeft = this.mode === 'burst' ? 3 : 1;
@@ -160,11 +178,11 @@ export class Player {
     this.updateViewmodel(dt, sprint, hs);
   }
 
-  fireOne() {
+  fireOne(auto = false) {
     if (this.mag <= 0) { this.burstLeft = 0; return; }
     this.mag--;
     this.burstLeft--;
-    this.fireCool = this.burstLeft > 0 ? 0.068 : this.mode === 'burst' ? 0.28 : 0.11;
+    this.fireCool = auto ? 0.085 : this.burstLeft > 0 ? 0.068 : this.mode === 'burst' ? 0.28 : 0.11;
     // 反動：視点の跳ね上がり＋左右ぶれ
     const kickUp = 0.012 + Math.random() * 0.008;
     this.pitch = Math.min(1.45, this.pitch + kickUp * (1 - this.ads * 0.35));
@@ -173,7 +191,7 @@ export class Player {
     this.recoil += kickUp;
     // 拡散
     const hs = Math.hypot(this.vel.x, this.vel.z);
-    const spread = (this.ads > 0.8 ? 0.0012 : 0.016) + hs * 0.004 + (this.onGround ? 0 : 0.05) - (this.crouch ? 0.004 : 0);
+    const spread = (this.ads > 0.8 ? 0.0012 : 0.016) + hs * 0.004 + (this.onGround ? 0 : 0.05) - (this.stance === 2 ? 0.008 : this.stance === 1 ? 0.004 : 0);
     const dir = this.forward;
     dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2;
     dir.normalize();
@@ -207,7 +225,7 @@ export class Player {
     p.z += this.kick * 0.045;
     let rx = 0, ry = (1 - ads) * 0.06, rz = (1 - ads) * -0.05;
     rx += this.kick * 0.06;
-    if (sprint) { p.add(new THREE.Vector3(0.06, -0.06, -0.02)); ry += 0.55; rx -= 0.25; rz += 0.3; }
+    if (sprint || (this.prone && hs > 0.3)) { p.add(new THREE.Vector3(0.06, -0.06, -0.02)); ry += 0.55; rx -= 0.25; rz += 0.3; }
     if (this.reloading > 0) {
       const r = this.reloading;
       const k = Math.sin(Math.min(1, (2.4 - r) / 2.4) * Math.PI);

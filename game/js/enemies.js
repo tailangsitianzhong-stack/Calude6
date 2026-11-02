@@ -194,7 +194,7 @@ class Enemy {
     const alerted = this.state !== 'patrol';
     if (fwd.dot(flat) < (alerted ? -0.2 : 0.35) && dist > 6) return false;
     // しゃがみ・静止のプレイヤーは遠くから見つけにくい
-    if (!alerted && dist > (P.crouch ? 35 : 70)) return false;
+    if (!alerted && dist > (P.prone ? 22 : P.crouch ? 35 : 70)) return false;
     to.normalize();
     const hit = this.mgr.world.raycast(me, to, dist);
     return !hit || hit.t > dist - 0.4;
@@ -295,10 +295,10 @@ class Enemy {
     this.shotCool = this.burst > 0 ? 0.12 : 1.0 + Math.random() * 1.2;
     // 命中率：距離・プレイヤーの移動・しゃがみで変化
     const pv = Math.hypot(P.vel.x, P.vel.z);
-    let p = 0.42 - dist / 120 - pv * 0.045 - (P.crouch ? 0.1 : 0) + (this.crouchMode ? 0.04 : 0);
+    let p = 0.42 - dist / 120 - pv * 0.045 - (P.prone ? 0.18 : P.crouch ? 0.1 : 0) + (this.crouchMode ? 0.04 : 0);
     p = Math.max(0.03, Math.min(0.45, p));
     const muzzle = this.rifle ? this.rifle.localToWorld(new THREE.Vector3(1.0, 0, 0)) : this.eye();
-    const target = P.eyePos.add(new THREE.Vector3(0, -0.35, 0));
+    const target = P.eyePos.add(new THREE.Vector3(0, -Math.min(0.35, P.eye * 0.4), 0));
     const hit = Math.random() < p;
     const aim = target.clone();
     if (!hit) aim.add(new THREE.Vector3((Math.random() - 0.5) * 2.5, (Math.random() - 0.2) * 1.5, (Math.random() - 0.5) * 2.5));

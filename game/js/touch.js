@@ -16,7 +16,7 @@ export function setupTouch({ root, getPlayer, isPlaying, onPause }) {
   const LOOK_SENS = 2.4;
   let stickId = null, sx = 0, sy = 0;
   let lookId = null, lx = 0, ly = 0;
-  let fireId = null, fx = 0, fy = 0;
+  let fireId = null, fx = 0, fy = 0, holdTimer = 0;
 
   const P = () => getPlayer();
 
@@ -69,7 +69,7 @@ export function setupTouch({ root, getPlayer, isPlaying, onPause }) {
         stickId = null; stick.classList.remove('on', 'sprint');
         const p = P(); p.moveInput = null; p.touchSprint = false;
       } else if (t.identifier === lookId) lookId = null;
-      else if (t.identifier === fireId) { fireId = null; P().trigger = false; btn('#t-fire').classList.remove('down'); }
+      else if (t.identifier === fireId) { fireId = null; clearTimeout(holdTimer); const p = P(); p.trigger = false; p.touchAuto = false; btn('#t-fire').classList.remove('down', 'auto'); }
     }
   };
   root.addEventListener('touchend', end);
@@ -89,7 +89,10 @@ export function setupTouch({ root, getPlayer, isPlaying, onPause }) {
     if (!isPlaying()) return;
     const t = e.changedTouches[0];
     fireId = t.identifier; fx = t.clientX; fy = t.clientY;
-    P().trigger = true;
+    const p = P();
+    p.trigger = true;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => { if (fireId !== null) { p.touchAuto = true; btn('#t-fire').classList.add('auto'); } }, 220);
     btn('#t-fire').classList.add('down');
   }, { passive: false });
   btn('#t-fire').addEventListener('touchmove', (e) => {
@@ -103,16 +106,24 @@ export function setupTouch({ root, getPlayer, isPlaying, onPause }) {
 
   tap('#t-ads', () => { const p = P(); p.adsHeld = !p.adsHeld; btn('#t-ads').classList.toggle('active', p.adsHeld); });
   tap('#t-reload', () => P().reload());
-  tap('#t-crouch', () => { const p = P(); p.crouch = !p.crouch; btn('#t-crouch').classList.toggle('active', p.crouch); });
+  tap('#t-crouch', () => P().cycleStance());
   tap('#t-jump', () => { const p = P(); p.keys.Space = true; setTimeout(() => { p.keys.Space = false; }, 120); });
   tap('#t-mode', () => P().toggleMode());
   tap('#t-pause', () => onPause());
 
+  const crouchBtn = btn('#t-crouch');
   return {
+    // しゃがみボタン：次に押したときの姿勢を表示
+    sync() {
+      const s = P().stance;
+      const label = ['しゃがむ', '伏せる', '立つ'][s];
+      if (crouchBtn.textContent !== label) crouchBtn.textContent = label;
+      crouchBtn.classList.toggle('active', s > 0);
+    },
     reset() {
       const p = P();
       stickId = lookId = fireId = null;
-      p.moveInput = null; p.touchSprint = false; p.trigger = false; p.adsHeld = false;
+      p.moveInput = null; p.touchSprint = false; p.trigger = false; p.adsHeld = false; p.touchAuto = false;
       stick.classList.remove('on', 'sprint');
       btn('#t-ads').classList.remove('active'); btn('#t-crouch').classList.remove('active');
     },

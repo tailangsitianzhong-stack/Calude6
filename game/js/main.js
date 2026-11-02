@@ -24,8 +24,23 @@ const TOUCH = isTouchDevice();
 const QS = new URLSearchParams(location.search);
 // スマホは既定で軽量表示（?high で通常）
 const LOW = QS.has('low') || (TOUCH && !QS.has('high'));
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: 'high-performance' });
-renderer.setPixelRatio(LOW ? 0.75 : Math.min(window.devicePixelRatio, 1.5));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// 解像度：端末の画素密度に合わせて高めに始め、重ければ自動で下げる（動的解像度）
+const MAX_PR = Math.min(window.devicePixelRatio || 1, QS.has('low') ? 1 : TOUCH ? 2 : 1.75);
+const MIN_PR = 0.75;
+let pixelRatio = MAX_PR;
+renderer.setPixelRatio(pixelRatio);
+const perf = { t: 0, frames: 0 };
+function adaptResolution(dt) {
+  perf.t += dt; perf.frames++;
+  if (perf.t < 2) return;
+  const fps = perf.frames / perf.t;
+  perf.t = 0; perf.frames = 0;
+  let next = pixelRatio;
+  if (fps < 30) next = Math.max(MIN_PR, pixelRatio - 0.2);
+  else if (fps > 52) next = Math.min(MAX_PR, pixelRatio + 0.1);
+  if (Math.abs(next - pixelRatio) > 0.01) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); renderer.setSize(window.innerWidth, window.innerHeight); }
+}
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -237,6 +252,8 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') player.reload();
   if (e.code === 'KeyB') player.toggleMode();
   if (e.code === 'KeyC' || e.code === 'ControlLeft') player.crouch = !player.crouch;
+  if (e.code === 'KeyZ') player.stance = player.stance === 2 ? 0 : 2;
+  if (e.code === 'KeyX') player.cycleStance();
   if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
   keysDown.add(e.code);
 });
@@ -296,7 +313,7 @@ function startGame(practice) {
   for (const e of enemies.list) e.dispose();
   enemies.list.length = 0;
   enemies.alertPos = null;
-  Object.assign(player, { health: 100, alive: true, mag: 30, reserve: 210, reloading: 0, crouch: false, burstLeft: 0, shake: 0, recoil: 0 });
+  Object.assign(player, { health: 100, alive: true, mag: 30, reserve: 210, reloading: 0, stance: 0, burstLeft: 0, shake: 0, recoil: 0 });
   player.pos.set(0, 0.16, 22);
   player.vel.set(0, 0, 0);
   player.yaw = 0; player.pitch = 0;
@@ -338,7 +355,8 @@ let lastHealth = 100, dmgFrom = null, dmgT = 0;
 function updateHUD(dt) {
   ui.ammo.textContent = player.mag;
   ui.reserve.textContent = player.reserve;
-  ui.mode.textContent = player.mode === 'semi' ? 'SEMI' : '3-RND BURST';
+  ui.mode.textContent = { semi: 'SEMI', burst: '3-RND BURST', auto: 'AUTO' }[player.mode] + (player.prone ? ' · 伏せ' : player.crouch ? ' · しゃがみ' : '');
+  touch?.sync();
   ui.hp.style.width = `${player.health}%`;
   ui.hp.classList.toggle('low', player.health < 35);
   ui.hpText.textContent = Math.ceil(player.health);
@@ -374,6 +392,7 @@ function frame() {
   if (state.mode === 'loading') return;
   update(dt);
   render();
+  adaptResolution(dt);
 }
 
 function update(dt) {
