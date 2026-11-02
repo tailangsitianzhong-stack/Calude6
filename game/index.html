@@ -98,6 +98,13 @@
 <section id="pause" class="screen dim" hidden>
   <div class="panel small">
     <h2>一時停止</h2>
+    <div class="weather quality" role="group" aria-label="画質">
+      <span>画質</span>
+      <button data-quality="low" aria-pressed="false">低</button>
+      <button data-quality="normal" aria-pressed="false">標準</button>
+      <button data-quality="high" aria-pressed="false">高</button>
+    </div>
+    <p class="note quality-note">低：解像度を下げ影なし ／ 標準：中解像度 ／ 高：端末の最高解像度・影あり。重いときは自動で少し下げます。</p>
     <div class="buttons">
       <button id="btn-resume" class="primary">再開する</button>
       <button id="btn-menu">メニューへ</button>

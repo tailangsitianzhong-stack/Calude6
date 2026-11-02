@@ -309,14 +309,14 @@ def foot_state(rest, s, phi, P):
         sw = (phi - D) / (1 - D)
         old = -strike + S * phi
         new = -strike + S * (phi - 1)
-        e = P.get("swing_ease", smoother)(sw)
+        e = P.get("swing_ease", swing_ease)(sw)
         flat_y = lerp(old, new, e)
         pitch = lerp(-p_off, p_strike, smooth((sw - 0.1) / 0.85)) + rad(P.get("swing_dorsi", 8)) * math.sin(math.pi * sw)
         Ab = place(flat_y, pitch, "ball")
         Ah = place(flat_y, pitch, "heel")
         w = smooth(sw)
         A = Ab.lerp(Ah, w)
-        lift = P["lift"] * P.get("lift_fn", lambda t: math.sin(math.pi * t) ** 1.3)(sw)
+        lift = P["lift"] * P.get("lift_fn", early_lift)(sw)
         A.z += lift
         toe_pitch = lerp(0.0, pitch, smooth(sw / 0.35))
     Rf = Rzy @ Rx(-pitch)
@@ -418,17 +418,35 @@ def rifle_hands(G, S_left, reach_left):
 # 歩容系モーション（歩く・走る・しゃがみ歩き）
 # ---------------------------------------------------------------------------
 
+def swing_ease(t):
+    """遊脚の前方移動：大腿の振り出しで前半に速く進み、踵接地前に減速する"""
+    t = clamp(t, 0.0, 1.0)
+    return 1.0 - (1.0 - t) ** 1.8 * (1.0 - 0.3 * t)
+
+
+def early_lift(t):
+    """遊脚期の足首の持ち上げ：振り出し初期（踵が尻側へ上がる）にピーク、踵接地前はほぼ 0"""
+    t = clamp(t, 0.0, 1.0)
+    if t < 0.3:
+        return smooth(t / 0.3)
+    return 1.0 - smooth((t - 0.3) / 0.5)
+
+
+# 参考：通常歩行の膝屈曲（立脚 5〜20°、遊脚初期に約 60°）、走行（立脚 40°前後、遊脚 90〜110°）。
+# 負荷携行時は体幹の前傾が 10°以上に増え、接地時の股関節・膝の屈曲が大きくなる。
 GAITS = {
-    "Walk": dict(T=32, stride=1.30, duty=0.61, strike_off=0.33, foot_x=0.095, drop=0.03, bob=0.018,
-                 sway=0.022, yaw=5.0, roll=3.0, lean=3.0, chest_yaw=5.0, lift=0.045,
-                 pitch_strike=18, pitch_off=38, heel_rock=0.16, heel_off=0.55, head_pitch=3.0,
-                 arm_swing=17, arm_fwd=2, elbow=14, elbow_amp=8, abd=12),
-    "Run": dict(T=20, stride=2.40, duty=0.35, strike_off=0.30, foot_x=0.06, drop=0.075, bob=0.032,
-                sway=0.012, yaw=8.0, roll=4.0, lean=9.0, chest_yaw=11.0, lift=0.26,
-                pitch_strike=8, pitch_off=48, heel_rock=0.15, heel_off=0.35, head_pitch=4.0,
-                arm_swing=34, arm_fwd=12, elbow=82, elbow_amp=12, abd=9, run=True,
-                lift_fn=lambda t: math.sin(math.pi * clamp(t, 0, 1) ** 0.62) ** 1.1,
-                swing_dorsi=14),
+    "Walk": dict(T=32, stride=1.30, duty=0.61, strike_off=0.33, foot_x=0.095, drop=0.035, bob=0.02,
+                 sway=0.024, yaw=7.0, roll=4.0, lean=6.0, chest_yaw=6.0, lift=0.10,
+                 pitch_strike=17, pitch_off=34, heel_rock=0.17, heel_off=0.52, head_pitch=0.0,
+                 arm_swing=19, arm_fwd=3, elbow=18, elbow_amp=12, abd=11, swing_dorsi=10),
+    "Run": dict(T=20, stride=2.40, duty=0.33, strike_off=0.24, foot_x=0.065, drop=0.085, bob=0.035,
+                sway=0.014, yaw=9.0, roll=5.0, lean=12.0, chest_yaw=12.0, lift=0.30,
+                pitch_strike=6, pitch_off=58, heel_rock=0.12, heel_off=0.3, head_pitch=-4.0,
+                arm_swing=36, arm_fwd=10, elbow=88, elbow_amp=14, abd=10, run=True,
+                lift_fn=lambda t: smooth(t / 0.32) if t < 0.32 else 1.0 - smooth((t - 0.32) / 0.55),
+                # 足はしばらく後ろに残り（踵が尻へ蹴り上がる）、後半で前へ振り出す
+                swing_ease=lambda t: smoother(clamp(t * 1.08 - 0.04, 0, 1)),
+                swing_dorsi=16),
     # その場で構えて立つ（呼吸による微小な上下動のみ）
     "Stand": dict(T=60, stride=0.0, duty=1.0, strike_off=0.0, foot_x=0.13, drop=0.035, bob=0.004,
                   sway=0.004, yaw=0.8, roll=0.5, lean=5.0, chest_yaw=0.5, lift=0.0,
@@ -441,7 +459,7 @@ GAITS = {
                      pitch_strike=0, pitch_off=0, heel_rock=0.1, heel_off=0.9, head_pitch=0.0,
                      arm_swing=0, arm_fwd=2, elbow=18, elbow_amp=0, abd=12, toe_out=8),
     "Crouch": dict(T=36, stride=0.95, duty=0.64, strike_off=0.25, foot_x=0.13, drop=0.25, bob=0.012,
-                   sway=0.03, yaw=4.0, roll=3.0, lean=24.0, chest_yaw=4.0, lift=0.05,
+                   sway=0.03, yaw=5.0, roll=3.0, lean=24.0, chest_yaw=4.0, lift=0.11,
                    pitch_strike=12, pitch_off=28, heel_rock=0.16, heel_off=0.55, head_pitch=-12.0,
                    arm_swing=8, arm_fwd=22, elbow=45, elbow_amp=5, abd=16, toe_out=10),
 }
@@ -449,7 +467,9 @@ GAITS = {
 RIFLE_STYLE = {
     # 低い構え（ローレディ）：床尾を肩に付け、銃口を下げる
     "Walk": dict(style="ready", pocket=V(-0.11, -0.165, 1.37), pitch=42, yaw=26, cant=6, blade=-26,
-                 head_pitch=6.0, stride_scale=0.9, drop_add=0.03, lean_add=3.0),
+                 head_pitch=6.0, stride_scale=0.9, drop_add=0.045, lean_add=4.0,
+                 # 戦術的な歩き方：膝を曲げたまま、上下動を抑え、骨盤の回旋も小さく（銃口を安定させる）
+                 bob_scale=0.45, lift_scale=0.8, yaw_scale=0.6, heel_rock=0.22),
     "Run": dict(style="ready", pocket=V(-0.10, -0.18, 1.33), pitch=46, yaw=32, cant=16, blade=-20,
                 head_pitch=4.0, stride_scale=1.0, drop_add=0.0, lean_add=2.0),
     # 構えながら前進：照準線に目を合わせ、銃は水平に安定
@@ -468,6 +488,11 @@ def gait_pose(rest, name, phi, rifle, over=None):
         P.update(over)
     RS = dict(RIFLE_STYLE[name]) if rifle else None
     if RS:
+        P["bob"] *= RS.get("bob_scale", 1.0)
+        P["lift"] *= RS.get("lift_scale", 1.0)
+        P["yaw"] *= RS.get("yaw_scale", 1.0)
+        if "heel_rock" in RS:
+            P["heel_rock"] = RS["heel_rock"]
         P["stride"] *= RS["stride_scale"]
         P["drop"] += RS["drop_add"]
         P["lean"] += RS["lean_add"]
@@ -759,35 +784,149 @@ def blend_pose(rest, a, b, t):
     return p
 
 
-DEATH_T = 40
+DEATH_T = 54        # 1.8 秒
+
+
+def orient(up, face):
+    """頭・胴の向き：上方向 up、正面 face（レストは上 +Z、正面 -Y）"""
+    up = up.normalized()
+    face = ortho(face, up)
+    right = face.cross(up).normalized()
+    M = Matrix((right, face, up)).transposed()
+    R0m = Matrix(((-1, 0, 0), (0, -1, 0), (0, 0, 1))).transposed()
+    return M @ R0m.transposed()
+
+
+def _lerpv(a, b, t):
+    return a.lerp(b, t)
+
+
+def _key(hips, hipsQ, spineQ, chestQ, headQ, ankL, ankR, poleL, poleR, footL, footR, wriL, wriR, epL, epR, palmL, palmR):
+    return dict(hips=hips, hipsQ=hipsQ, spineQ=spineQ, chestQ=chestQ, headQ=headQ, ankL=ankL, ankR=ankR,
+                poleL=poleL, poleR=poleR, footL=footL, footR=footR, wriL=wriL, wriR=wriR, epL=epL, epR=epR,
+                palmL=palmL, palmR=palmR)
+
+
+def death_keys():
+    """被弾→のけぞり→膝が崩れる→膝をつく→前のめりに倒れる→右側を下に横たわる"""
+    up, fwd = V(0, 0, 1), V(0, -1, 0)
+    prone = Rx(rad(90))
+    roll = Ry(rad(-28))                                     # 右側（-X）を下に
+    dn = V(0, 0, -1)
+    keys = [
+        # t, 姿勢
+        (0.10, _key(V(0, 0.06, 0.90), Rx(rad(-7)), Rx(rad(-12)), Rz(rad(10)) @ Rx(rad(-18)), Rz(rad(14)) @ Rx(rad(-24)),
+                    V(0.13, -0.15, 0.095), V(-0.13, 0.12, 0.095), V(0.1, -1, 0), V(-0.1, -1, 0), fwd, fwd,
+                    V(0.30, -0.30, 1.15), V(-0.24, -0.22, 1.05), V(0.6, 0.2, -0.8), V(-0.6, 0.2, -0.8), V(0, 0, 1), V(0, 0, 1))),
+        (0.30, _key(V(0.02, 0.07, 0.66), Rx(rad(18)), Rx(rad(26)), Rz(rad(6)) @ Rx(rad(34)), Rz(rad(10)) @ Rx(rad(55)),
+                    V(0.13, -0.15, 0.095), V(-0.13, 0.12, 0.095), V(0.2, -1, 0), V(-0.15, -1, 0), fwd, fwd,
+                    V(0.26, -0.18, 0.62), V(-0.24, -0.12, 0.58), V(0.5, 0.4, -0.7), V(-0.5, 0.4, -0.7), V(-1, 0, 0), V(1, 0, 0))),
+        (0.48, _key(V(0.03, 0.02, 0.50), Rx(rad(40)), Rx(rad(52)), Rz(rad(-4)) @ Rx(rad(62)), Rz(rad(-8)) @ Rx(rad(82)),
+                    V(0.16, 0.30, 0.11), V(-0.14, 0.34, 0.11), V(0.2, -1, -0.6), V(-0.2, -1, -0.6),
+                    V(0, 1, -0.25), V(0, 1, -0.25),
+                    V(0.24, -0.45, 0.28), V(-0.22, -0.42, 0.25), V(0.6, 0.3, -0.6), V(-0.6, 0.3, -0.6), V(0, 0, -1), V(0, 0, -1))),
+        (0.74, _key(V(0.05, -0.32, 0.17), roll @ Rx(rad(86)), roll @ Rx(rad(84)), Ry(rad(-34)) @ Rx(rad(78)),
+                    orient(V(0, -1, 0.25), V(0.85, -0.1, -0.5)),
+                    V(0.22, 0.45, 0.10), V(-0.30, 0.34, 0.13), V(0.5, 0, -1), V(-0.8, 0, -0.6),
+                    V(0, 0.55, -0.83), V(-0.3, 0.5, -0.8),
+                    V(0.33, -0.22, 0.07), V(-0.36, -0.86, 0.06), V(0.3, 0.5, -0.8), V(-0.8, 0.0, -0.6), V(0, 0, 1), V(0, 0, -1))),
+        (1.00, _key(V(0.05, -0.33, 0.155), roll @ Rx(rad(88)), roll @ Rx(rad(86)), Ry(rad(-36)) @ Rx(rad(82)),
+                    orient(V(0, -1, 0.18), V(0.9, -0.05, -0.45)),
+                    V(0.22, 0.47, 0.095), V(-0.32, 0.33, 0.12), V(0.5, 0, -1), V(-0.85, 0, -0.5),
+                    V(0, 0.6, -0.8), V(-0.35, 0.5, -0.79),
+                    V(0.34, -0.20, 0.06), V(-0.38, -0.88, 0.05), V(0.3, 0.5, -0.8), V(-0.8, 0.0, -0.6), V(0, 0, 1), V(0, 0, -1))),
+    ]
+    void_ = (up, fwd, prone, dn)
+    return keys
+
+
+def _interp_key(a, b, t):
+    out = {}
+    for k, va in a.items():
+        vb = b[k]
+        out[k] = slerp_m(va, vb, t) if isinstance(va, Matrix) else _lerpv(va, vb, t)
+    return out
 
 
 def death_pose(rest, phi):
-    A = gait_pose(rest, "Stand", 0.0, True)
-    K = gait_pose(rest, "Crouch", 0.12, False)            # 膝が崩れた中間姿勢
-    K.hips_pos = K.hips_pos + V(0, 0.05, -0.12)
-    K.Q["chest"] = Rx(rad(35)) @ K.Q["chest"]
-    K.Q["head"] = Rx(rad(25)) @ K.Q["head"]
-    B = prone_pose(rest, 0.25, False)
-    B.hips_pos = B.hips_pos + V(0, -0.62, -0.02)            # 足の位置から前へ倒れ込む
-    B.Q["head"] = Rz(rad(70)) @ Rx(rad(80))                 # 顔を横に向けて地面へ
-    B.Q["neck"] = slerp_m(B.Q["chest"], B.Q["head"], 0.5)
-    ground = mat4(Rz(rad(25)) @ Matrix(((0, 0, 1), (-1, 0, 0), (0, -1, 0))), V(0.45, -0.75, 0.035))
-    K.weapon = A.weapon
-    B.weapon = ground
-    if phi < 0.35:
-        t = smooth(phi / 0.35)
-        P = blend_pose(rest, A, K, t)
+    A = gait_pose(rest, "Stand", 0.0, True)        # 撃たれた瞬間：構えて立っている
+    keys = death_keys()
+    if phi <= keys[0][0]:
+        # 立ち姿勢 → のけぞり（素早く）
+        t0 = smooth(phi / keys[0][0])
+        P = ragdoll_pose(rest, keys[0][1], A, t0)
     else:
-        t = ((phi - 0.35) / 0.65) ** 1.7                     # 重力で加速しながら倒れる
-        P = blend_pose(rest, K, B, t)
-        if t > 0.92:                                        # 着地の小さなバウンド
-            P.hips_pos.z += 0.02 * math.sin(math.pi * (t - 0.92) / 0.08)
-    # 銃はすぐに手を離れ、重力で落ちる
-    tw = clamp((phi - 0.05) / 0.5, 0, 1) ** 2
-    R = slerp_m(A.weapon.to_3x3(), ground.to_3x3(), tw)
-    P.weapon = mat4(R, A.weapon.translation.lerp(ground.translation, tw))
+        for (ta, ka), (tb, kb) in zip(keys, keys[1:]):
+            if phi <= tb:
+                t = (phi - ta) / (tb - ta)
+                if ta >= 0.48 and tb <= 0.74:
+                    t = t ** 1.8                           # 前に倒れる区間は重力で加速
+                else:
+                    t = smooth(t)
+                P = ragdoll_pose(rest, _interp_key(ka, kb, t), None, 1.0)
+                break
+        # 地面に当たった直後の小さな跳ね返り
+        if 0.74 < phi < 0.86:
+            P.hips_pos.z += 0.035 * math.sin(math.pi * (phi - 0.74) / 0.12)
+            P = ragdoll_pose(rest, _interp_key(keys[3][1], keys[4][1], smooth((phi - 0.74) / 0.26)), None, 1.0,
+                             bounce=0.035 * math.sin(math.pi * (phi - 0.74) / 0.12))
+    # 銃：撃たれた直後に手を離れ、回転しながら落ちて地面で止まる
+    ground = mat4(Rz(rad(25)) @ Matrix(((0, 0, 1), (-1, 0, 0), (0, -1, 0))), V(0.55, -0.55, 0.035))
+    tw = clamp((phi - 0.08) / 0.28, 0, 1)               # 約 0.5 秒で地面へ（自由落下）
+    fall = tw * tw
+    R = slerp_m(A.weapon.to_3x3(), ground.to_3x3(), smooth(tw))
+    pos = A.weapon.translation.lerp(ground.translation, fall)
+    pos.z += 0.12 * math.sin(math.pi * min(1.0, tw * 1.3)) * (1 - tw)
+    if 0.36 < phi < 0.46:
+        pos.z += 0.04 * math.sin(math.pi * (phi - 0.36) / 0.10)   # 地面で小さく跳ねる
+    P.weapon = mat4(R, pos)
     return P
+
+
+def ragdoll_pose(rest, k, base=None, w=1.0, bounce=0.0):
+    """キー（骨盤・背骨・頭の向き、足首・手首の目標）から IK で全身の姿勢を作る。
+    base があれば base の姿勢から k へ w の割合で寄せる（のけぞりの立ち上がり用）"""
+    pose = Pose(rest)
+    if base is not None:
+        pose.hips_pos = base.hips_pos.lerp(k["hips"], w)
+        for n, q in (("hips", "hipsQ"), ("spine", "spineQ"), ("chest", "chestQ"), ("head", "headQ")):
+            pose.Q[n] = slerp_m(base.Q[n], k[q], w)
+        pose.Q["neck"] = slerp_m(pose.Q["chest"], pose.Q["head"], 0.5)
+        for s in (1, -1):
+            sfx = rest.side[s]["sfx"]
+            pose.Q["shoulder" + sfx] = pose.Q["chest"]
+    else:
+        pose.hips_pos = k["hips"] + V(0, 0, bounce)
+        pose.Q["hips"], pose.Q["spine"], pose.Q["chest"], pose.Q["head"] = k["hipsQ"], k["spineQ"], k["chestQ"], k["headQ"]
+        pose.Q["neck"] = slerp_m(k["chestQ"], k["headQ"], 0.5)
+        for s in (1, -1):
+            pose.Q["shoulder" + rest.side[s]["sfx"]] = k["chestQ"]
+    M = pose.matrices()
+    # 脚
+    for s, ank, pole, fd in ((1, k["ankL"], k["poleL"], k["footL"]), (-1, k["ankR"], k["poleR"], k["footR"])):
+        rs = rest.side[s]
+        hip = bone_point(rest, M, "thigh" + rs["sfx"], rs["hip"])
+        if base is not None:
+            # 立ち姿勢のときの足首位置から寄せる
+            ank0 = bone_point(rest, base.matrices(), "foot" + rs["sfx"], rs["ankle"])
+            ank = ank0.lerp(ank, w)
+        knee, ankle = ik2(hip, ank, rs["l_thigh"], rs["l_shin"], pole)
+        bend = ortho(knee - hip, (ankle - hip).normalized())
+        fdir = fd.normalized()
+        lat = ortho(V(1, 0, 0), fdir)
+        leg_rotations(pose, s, hip, knee, ankle, bend, fdir, lat, (fdir + V(0, 0.2, 0.3)).normalized() if fdir.z < -0.5 else fdir)
+    M = pose.matrices()
+    # 腕（力の抜けた腕：肘を少し曲げ、手首は重力方向へ）
+    for s, wri, ep, palm in ((1, k["wriL"], k["epL"], k["palmL"]), (-1, k["wriR"], k["epR"], k["palmR"])):
+        rs = rest.side[s]
+        S = (M["shoulder" + rs["sfx"]] @ V(0, rest.b["shoulder" + rs["sfx"]]["length"], 0, 1)).to_3d()
+        if base is not None:
+            W0 = base.matrices()["hand" + rs["sfx"]].translation
+            wri = W0.lerp(wri, w)
+        E, W = ik2(S, wri, rs["l_up"], rs["l_fo"] * 0.97, ep)
+        hd = ((W - E).normalized() + V(0, 0, -0.35)).normalized()
+        arm_rotations(pose, s, S, E, W, hd, ortho(palm, hd))
+    return pose
 
 
 # ---------------------------------------------------------------------------

@@ -20,17 +20,23 @@ const ui = {
 
 // ---------------------------------------------------------------- レンダラー
 const canvas = $('game');
-// ?low で軽量表示（影なし・低解像度）
 const TOUCH = isTouchDevice();
 const QS = new URLSearchParams(location.search);
-// スマホは既定で軽量表示（?high で通常）
-const LOW = QS.has('low') || (TOUCH && !QS.has('high'));
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-// 解像度：端末の画素密度に合わせて高めに始め、重ければ自動で下げる（動的解像度）
-const MAX_PR = Math.min(window.devicePixelRatio || 1, QS.has('low') ? 1 : TOUCH ? 2 : 1.75);
-const MIN_PR = 0.75;
+// 画質プリセット（一時停止画面で切り替え）：解像度の上限・下限と影
+const DPR = window.devicePixelRatio || 1;
+const QUALITY = {
+  low: { label: '低', max: Math.min(DPR, 0.85), min: 0.5, shadows: false, shadowSize: 1024 },
+  normal: { label: '標準', max: Math.min(DPR, 1.3), min: 0.7, shadows: !TOUCH, shadowSize: 1024 },
+  high: { label: '高', max: Math.min(DPR, 2), min: 0.9, shadows: true, shadowSize: 2048 },
+};
+let quality = QS.has('low') ? 'low' : QS.has('high') ? 'high' : TOUCH ? 'normal' : 'high';
+try { const q = localStorage.getItem('rubble-quality'); if (q && QUALITY[q] && !QS.has('low') && !QS.has('high')) quality = q; } catch (_) { /* 読めない環境 */ }
+let MAX_PR = QUALITY[quality].max, MIN_PR = QUALITY[quality].min;
+const LOW = !QUALITY[quality].shadows;
 let pixelRatio = MAX_PR;
 renderer.setPixelRatio(pixelRatio);
+// 重ければ解像度を自動で下げ、余裕があればプリセットの上限まで戻す（動的解像度）
 const perf = { t: 0, frames: 0 };
 function adaptResolution(dt) {
   perf.t += dt; perf.frames++;
@@ -38,7 +44,7 @@ function adaptResolution(dt) {
   const fps = perf.frames / perf.t;
   perf.t = 0; perf.frames = 0;
   let next = pixelRatio;
-  if (fps < 30) next = Math.max(MIN_PR, pixelRatio - 0.2);
+  if (fps < 30) next = Math.max(MIN_PR, pixelRatio - 0.15);
   else if (fps > 52) next = Math.min(MAX_PR, pixelRatio + 0.1);
   if (Math.abs(next - pixelRatio) > 0.01) { pixelRatio = next; renderer.setPixelRatio(pixelRatio); renderer.setSize(window.innerWidth, window.innerHeight); }
 }
@@ -90,12 +96,30 @@ const hemi = new THREE.HemisphereLight(0xbcb8ae, 0x4d4338, 1.25);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffcf98, 2.6);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(QUALITY[quality].shadowSize, QUALITY[quality].shadowSize);
 const SH = 60;
 Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 300 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
+
+function setQuality(name) {
+  const Q = QUALITY[name];
+  if (!Q) return;
+  quality = name;
+  MAX_PR = Q.max; MIN_PR = Q.min;
+  pixelRatio = Q.max;
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  if (renderer.shadowMap.enabled !== Q.shadows || sun.shadow.mapSize.x !== Q.shadowSize) {
+    renderer.shadowMap.enabled = Q.shadows;
+    sun.shadow.mapSize.set(Q.shadowSize, Q.shadowSize);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); });
+  }
+  document.querySelectorAll('[data-quality]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.quality === name)));
+  try { localStorage.setItem('rubble-quality', name); } catch (_) { /* 保存できない環境 */ }
+}
 
 // 天候プリセット：くもり（煙で霞んだ夕方）／晴れ（高い太陽と青空、乾いた空気）
 const WEATHER = {
@@ -138,6 +162,8 @@ let savedWeather = 'cloudy';
 try { savedWeather = localStorage.getItem('rubble-weather') || 'cloudy'; } catch (_) { /* 読めない環境 */ }
 applyWeather(QS.get('weather') || savedWeather);
 document.querySelectorAll('[data-weather]').forEach((b) => b.addEventListener('click', () => applyWeather(b.dataset.weather)));
+document.querySelectorAll('[data-quality]').forEach((b) => b.addEventListener('click', () => setQuality(b.dataset.quality)));
+setQuality(quality);
 const vmHolder = new THREE.Group();
 const vmRoot = new THREE.Group();
 vmHolder.add(vmRoot);

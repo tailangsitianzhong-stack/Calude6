@@ -168,3 +168,5 @@ body.touch #banner { font-size: 18px; }
   right: calc(176px + env(safe-area-inset-right, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); }
 body.touch.practice #t-view { display: flex !important; }
 body.third #cross { --gap: 6px !important; }
+.quality-note { font-size: 12px; max-width: 30em; text-align: left; }
+.panel.small .weather { justify-content: center; }
