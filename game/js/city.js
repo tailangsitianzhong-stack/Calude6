@@ -87,7 +87,7 @@ function box(B, F, key, cx, cy, cz, sx, sy, sz, o = {}) {
 function jagged(B, F, key, u0, u1, y, n0, color, count = 6) {
   for (let i = 0; i < count; i++) {
     const w = R(0.25, 0.8), h = R(0.15, 0.7);
-    box(B, F, key, R(u0, u1), y + h / 2 - 0.05, n0, w, h, R(0.25, 0.42), { color, rz: R(-0.4, 0.4), ry: R(-0.2, 0.2) });
+    box(B, F, key, R(u0, u1), y + h / 2 - 0.05, n0 + R(-0.04, 0.04), w, h, R(0.25, 0.42), { color, rz: R(-0.4, 0.4), ry: R(0.06, 0.25) * (rand() < 0.5 ? -1 : 1) });
   }
 }
 
@@ -157,22 +157,22 @@ function facade(B, F, spec) {
         // 枠（開口内側に奥まって）
         box(B, F, fk, wl + 0.04, (yS + yT) / 2, -0.16, 0.08, oh, 0.1, { color: fc });
         box(B, F, fk, wr - 0.04, (yS + yT) / 2, -0.16, 0.08, oh, 0.1, { color: fc });
-        box(B, F, fk, uc, yT - 0.04, -0.16, ow, 0.08, 0.1, { color: fc });
-        box(B, F, fk, uc, yS + 0.04, -0.16, ow, 0.08, 0.1, { color: fc });
+        box(B, F, fk, uc, yT - 0.04, -0.165, ow - 0.16, 0.08, 0.09, { color: fc });
+        box(B, F, fk, uc, yS + 0.04, -0.165, ow - 0.16, 0.08, 0.09, { color: fc });
         if (kind === 'win') {
-          box(B, F, fk, uc, (yS + yT) / 2, -0.16, 0.05, oh, 0.06, { color: fc });            // 縦桟
-          box(B, F, fk, uc, yS + oh * 0.68, -0.16, ow, 0.05, 0.06, { color: fc });         // 横桟
+          box(B, F, fk, uc, (yS + yT) / 2, -0.17, 0.05, oh - 0.16, 0.06, { color: fc });     // 縦桟
+          box(B, F, fk, uc, yS + oh * 0.68, -0.175, ow - 0.16, 0.05, 0.045, { color: fc });  // 横桟
           // 窓台
-          box(B, F, 'stone', uc, yS - 0.05, 0.06, ow + 0.24, 0.1, 0.26, { color: 0xd0cabd });
+          box(B, F, 'stone', uc, yS - 0.04, 0.085, ow + 0.24, 0.1, 0.17, { color: 0xd0cabd });   // 壁面より手前・1cm 高く
           // まぐさ・ペディメント
           const st = spec.winStyle;
           if (st === 1) box(B, F, key, uc, yT + 0.12, 0.05, ow + 0.4, 0.24, 0.12, { color: shade(color, 1.08) });
           else if (st === 2) {
             box(B, F, key, uc, yT + 0.1, 0.07, ow + 0.5, 0.12, 0.16, { color: shade(color, 1.1) });
             box(B, F, key, uc - ow * 0.28, yT + 0.3, 0.07, ow * 0.62, 0.1, 0.14, { color: shade(color, 1.1), rz: 0.32 });
-            box(B, F, key, uc + ow * 0.28, yT + 0.3, 0.07, ow * 0.62, 0.1, 0.14, { color: shade(color, 1.1), rz: -0.32 });
+            box(B, F, key, uc + ow * 0.28, yT + 0.3, 0.064, ow * 0.62, 0.1, 0.132, { color: shade(color, 1.1), rz: -0.32 });
           } else if (st === 3) {
-            box(B, F, 'stone', uc, yT + 0.16, 0.04, 0.26, 0.32, 0.1, { color: 0xd8d2c6 });  // 要石
+            box(B, F, 'stone', uc, yT + 0.165, 0.045, 0.26, 0.32, 0.1, { color: 0xd8d2c6 });  // 要石
             box(B, F, key, uc, yT + 0.06, 0.03, ow + 0.3, 0.12, 0.08, { color: shade(color, 1.06) });
           }
           // 窓周りの縁取り
@@ -198,7 +198,7 @@ function facade(B, F, spec) {
           }
         } else {
           // ショーウィンドウ：看板・日除け
-          box(B, F, fk, uc, (yS + yT) / 2, -0.16, 0.06, oh, 0.08, { color: fc });
+          box(B, F, fk, uc, (yS + yT) / 2, -0.17, 0.06, oh - 0.16, 0.07, { color: fc });
         }
       }
       if (kind === 'door') {
@@ -232,8 +232,8 @@ function facade(B, F, spec) {
       box(B, F, 'metal', ac, gh - 0.85, 0.05, aw, 0.05, 0.05, {});
     }
   }
-  // 蛇腹（階ごとの帯）とメインコーニス
-  if (detail > 0) {
+  // 蛇腹（階ごとの帯）とメインコーニス（隣の建物と接する側面には付けない）
+  if (detail > 0 && spec.trim !== false) {
     for (let f = 1; f <= maxF; f++) {
       const y = yOf(f);
       let segs = [];
@@ -244,22 +244,23 @@ function facade(B, F, spec) {
       const flush = (a, b) => {
         const uu0 = a * bw, uu1 = (b + 1) * bw;
         const isTop = f === maxF && floorsAt[a] === maxF;
+        const yo = spec.trimOff || 0;          // 角で正面の軒と重ならないよう側面は少しずらす
         if (isTop && spec.cornice) {
-          box(B, F, key, (uu0 + uu1) / 2, y - 0.2, 0.18, uu1 - uu0 + 0.3, 0.4, 0.55, { color: shade(color, 1.1) });
-          box(B, F, key, (uu0 + uu1) / 2, y + 0.02, 0.32, uu1 - uu0 + 0.4, 0.12, 0.75, { color: shade(color, 1.12) });
+          box(B, F, key, (uu0 + uu1) / 2, y - 0.205 + yo, 0.2 + yo, uu1 - uu0 - 0.006, 0.39, 0.4, { color: shade(color, 1.1) });
+          box(B, F, key, (uu0 + uu1) / 2, y + 0.02 + yo, 0.32 + yo, uu1 - uu0 - 0.012, 0.12, 0.75, { color: shade(color, 1.12) });
           for (let u = uu0 + 0.4; u < uu1 - 0.2; u += 0.75) box(B, F, key, u, y - 0.55, 0.15, 0.12, 0.3, 0.3, { color: shade(color, 1.05) });
         } else {
-          box(B, F, key, (uu0 + uu1) / 2, y + 0.05, 0.06, uu1 - uu0, 0.18, 0.14, { color: shade(color, 1.08) });
+          box(B, F, key, (uu0 + uu1) / 2, y + 0.05 + yo, 0.06 + yo, uu1 - uu0 - 0.006, 0.18, 0.14, { color: shade(color, 1.08) });
         }
       };
       for (const i of segs.slice(1)) { if (i !== prev + 1) { flush(s0, prev); s0 = i; } prev = i; }
       flush(s0, prev);
     }
     // 基壇
-    box(B, F, 'stone', L / 2, 0.3, 0.05, L, 0.6, 0.12, { color: 0xb8b2a4 });
+    box(B, F, 'stone', L / 2, 0.3, 0.05, L - 0.006, 0.6, 0.12, { color: 0xb8b2a4 });
   }
   // 戦時ポスター
-  if (detail > 0 && rand() < 0.5) {
+  if (detail > 0 && spec.trim !== false && rand() < 0.5) {
     const pu = R(0.6, L - 1.4), py = R(1.2, 1.7), pi = Math.floor(rand() * 4);
     const ox = (pi % 2) / 2, oy = 1 - Math.floor(pi / 2) / 2;
     B.quad('poster', [F.pt(pu, py, 0.03), F.pt(pu + 0.62, py, 0.03), F.pt(pu + 0.62, py + 0.62, 0.03), F.pt(pu, py + 0.62, 0.03)],
@@ -325,11 +326,13 @@ export function building(ctx, F, o) {
   const maxH = (() => { const mf = Math.max(...floors); return gh + (mf - 1) * fh; })();
   // 背面・側面
   const back = F.child(w, -dp, Math.PI);
-  const left = F.child(0, -dp, -Math.PI / 2);
-  const right = F.child(w, 0, Math.PI / 2);
+  const t0 = 0.42;
+  const left = F.child(0, -dp + t0, -Math.PI / 2);
+  const right = F.child(w, -t0, Math.PI / 2);
+  const sideL = dp - 2 * t0;
   const sideSpec = (L, exposed, sideFloors) => ({
     ...spec, L, shop: false, door: -1, floors: sideFloors, dmgCells: new Set(), detail: exposed ? detail : 0,
-    soot: spec.soot * 0.5,
+    soot: spec.soot * 0.5, trim: exposed, trimOff: 0.013,
   });
   const avgF = Math.round(floors.reduce((a, b) => a + b, 0) / floors.length);
   const exposedBack = o.enterable || o.exposedBack;
@@ -337,14 +340,14 @@ export function building(ctx, F, o) {
   else plainWall(B, back, w, maxH, key, color);
   for (const [fr, exposed, first] of [[left, o.cornerLeft, true], [right, o.cornerRight, false]]) {
     if (exposed || o.enterable) {
-      const n = Math.max(1, Math.round(dp / (exposed ? 3.1 : 3.6)));
+      const n = Math.max(1, Math.round(sideL / (exposed ? 3.1 : 3.6)));
       const sf = new Array(n).fill(0).map((_, i) => {
         const fi = first ? floors[0] : floors[floors.length - 1];
         return Math.max(1, fi - (dmg >= 2 && i > n / 2 ? RI(0, 1) : 0));
       });
-      facade(B, fr, { ...sideSpec(dp, exposed, sf), shop: exposed && o.shop, detail: exposed ? detail : (o.enterable ? 1 : 0) });
+      facade(B, fr, { ...sideSpec(sideL, exposed, sf), shop: exposed && o.shop, detail: exposed ? detail : (o.enterable ? 1 : 0) });
     } else {
-      plainWall(B, fr, dp, first ? gh + (floors[0] - 1) * fh : gh + (floors[floors.length - 1] - 1) * fh, key, color);
+      plainWall(B, fr, sideL, first ? gh + (floors[0] - 1) * fh : gh + (floors[floors.length - 1] - 1) * fh, key, color);
     }
   }
   // 屋内：暗い内壁（BackSide）と床スラブ
@@ -386,15 +389,26 @@ export function building(ctx, F, o) {
   return { maxH };
 }
 
+// 妻壁：三角柱（x から x+0.42 の厚み、底辺は奥行き全体）
+function gable(B, F, key, x, H, dp, rise, color) {
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0); sh.lineTo(dp, 0); sh.lineTo(dp / 2, rise); sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.42, bevelEnabled: false });
+  // 形状 X → 局所 -z、形状 Y → y、押し出し Z → +x
+  const m = new THREE.Matrix4().set(0, 0, 1, x, 0, 1, 0, H, -1, 0, 0, 0, 0, 0, 0, 1);
+  B.geom(key, g, new THREE.Matrix4().multiplyMatrices(F.m, m), color, 0.5);
+}
+
 function roof(ctx, F, w, dp, H, broken, key, color, dmg) {
   const { B } = ctx;
   const pitched = rand() < 0.5 && !broken;
   if (!pitched) {
-    box(B, F, 'concrete', w / 2, H + 0.05, -dp / 2, w, 0.12, dp, { color: 0x77736b });
-    // パラペット
-    for (const [cx, cz, sx, sz] of [[w / 2, -0.21, w, 0.42], [w / 2, -dp + 0.21, w, 0.42], [0.21, -dp / 2, 0.42, dp], [w - 0.21, -dp / 2, 0.42, dp]]) {
+    box(B, F, 'concrete', w / 2, H + 0.04, -dp / 2, w - 0.84, 0.1, dp - 0.84, { color: 0x77736b });
+    // パラペット（前後は全幅、左右は前後の間だけ）
+    for (const [cx, cz, sx, sz, cap] of [[w / 2, -0.21, w, 0.42, 1], [w / 2, -dp + 0.21, w, 0.42, 1],
+      [0.21, -dp / 2, 0.42, dp - 0.84, 0], [w - 0.21, -dp / 2, 0.42, dp - 0.84, 0]]) {
       box(B, F, key, cx, H + 0.5, cz, sx, 1.0, sz, { color });
-      box(B, F, 'stone', cx, H + 1.04, cz, sx + 0.08, 0.08, sz + 0.08, { color: 0xb8b2a6 });
+      box(B, F, 'stone', cx, H + 1.04 + (cap ? 0.005 : 0), cz, sx + 0.08, 0.08, cap ? sz + 0.08 : sz - 0.08, { color: 0xb8b2a6 });
     }
     if (rand() < 0.5) box(B, F, 'concrete', R(1.5, w - 1.5), H + 1.2, -R(2, dp - 2), R(1.5, 2.5), 2.2, R(1.5, 2.5), { color: 0x8a857c });
   } else {
@@ -405,7 +419,7 @@ function roof(ctx, F, w, dp, H, broken, key, color, dmg) {
     for (const s of [1, -1]) {
       const cz = s > 0 ? -ridge / 2 : -dp + ridge / 2;
       const missing = holes > 0 && rand() < 0.5;
-      if (!missing) box(B, F, 'roof', w / 2, H + rise / 2, cz, w + 0.6, 0.08, slant + 0.4, { rx: s * pitch, uv: 2 });
+      if (!missing) box(B, F, 'roof', w / 2, H + rise / 2 + (s > 0 ? 0 : 0.004), cz, w + 0.6 - (s > 0 ? 0 : 0.03), 0.08, slant + 0.4, { rx: s * pitch, uv: 2 });
       else {
         // 抜けた屋根：垂木だけ残る
         box(B, F, 'roof', w * 0.25, H + rise / 2, cz, w * 0.5 + 0.3, 0.08, slant + 0.4, { rx: s * pitch });
@@ -413,12 +427,7 @@ function roof(ctx, F, w, dp, H, broken, key, color, dmg) {
       }
     }
     // 妻壁（三角）
-    for (const x of [0.21, w - 0.21]) {
-      for (let k = 0; k < 6; k++) {
-        const hh = rise * (1 - k / 6);
-        box(B, F, key, x, H + hh / 2, -ridge, 0.42, hh, (dp - 0.4) * (1 - k / 6) / 1, { color });
-      }
-    }
+    for (const x of [0, w - 0.42]) gable(B, F, key, x, H, dp, rise, color);
     // 煙突
     const nch = RI(1, 2);
     for (let k = 0; k < nch; k++) {
@@ -650,8 +659,9 @@ function ruinBlock(ctx, cx, cz) {
   for (let s = 0; s < 4; s++) {
     const SF = sideFrame(cx, cz, s);
     let u = 0;
-    while (u < BLOCK - 14) {
-      const w = RI(10, 15);
+    while (u < BLOCK - 14 - 4) {
+      let w = RI(10, 15);
+      if (BLOCK - 14 - (u + w) < 6) w = BLOCK - 14 - u;   // 角の区画にはみ出さない
       const F = SF.child(u, 0, 0);
       const r = rand();
       if (r < 0.45) building(ctx, F, { w, dp: RI(10, 13), floors: RI(2, 3), dmg: 3, shop: rand() < 0.5, enterable: true, cornerLeft: u === 0 });
@@ -678,7 +688,7 @@ function ruinBlock(ctx, cx, cz) {
   for (let k = 0; k < 5; k++) rubblePile(ctx, new THREE.Vector3(cx + R(-12, 12), 0, cz + R(-12, 12)), R(1.5, 3.5), R(0.6, 1.8));
   for (let k = 0; k < 3; k++) tree(ctx, cx + R(-14, 14), cz + R(-14, 14));
   // 地面：土と瓦礫
-  B.box('rubble', cx, 0.02, cz, BLOCK, 0.04, BLOCK, { uv: 4 });
+  B.box('rubble', cx, 0.02, cz, BLOCK - 1.2, 0.04, BLOCK - 1.2, { uv: 4 });
 }
 
 function plaza(ctx, cx, cz) {
@@ -745,7 +755,7 @@ export function buildCity(scene, T) {
     }
     // 縁石
     const o = h + sw;
-    for (const [x, z, sx, sz] of [[cx, cz + o, BLOCK + 2 * sw, 0.25], [cx, cz - o, BLOCK + 2 * sw, 0.25], [cx + o, cz, 0.25, BLOCK + 2 * sw], [cx - o, cz, 0.25, BLOCK + 2 * sw]]) {
+    for (const [x, z, sx, sz] of [[cx, cz + o, BLOCK + 2 * sw, 0.25], [cx, cz - o, BLOCK + 2 * sw, 0.25], [cx + o, cz, 0.25, BLOCK + 2 * sw - 0.5], [cx - o, cz, 0.25, BLOCK + 2 * sw - 0.5]]) {
       ground.B.box('stone', x, 0.09, z, sx, 0.18, sz, { uv: 1, color: 0xa8a49c, faces: 63 & ~8 });
     }
   }
@@ -767,9 +777,12 @@ export function buildCity(scene, T) {
   const edge = mk();
   for (let s = 0; s < 4; s++) {
     const rot = [0, Math.PI / 2, Math.PI, -Math.PI / 2][s];
-    let u = -LIMIT - 12;
-    while (u < LIMIT + 12) {
-      const w = RI(10, 16);
+    // 北・南の列は角まで、東・西の列は角の手前（±LIMIT）で止めて重ならないように
+    const u0 = s % 2 === 0 ? -LIMIT - 13 : -LIMIT - 1, u1 = s % 2 === 0 ? LIMIT + 13 : LIMIT + 1;
+    let u = u0;
+    while (u < u1 - 0.5) {
+      let w = RI(10, 16);
+      if (u1 - (u + w) < 6) w = u1 - u;
       // s=0: 北側（z=-LIMIT）の建物、正面は +z
       let F;
       if (s === 0) F = new Frame(null, u, -LIMIT - 1, 0);

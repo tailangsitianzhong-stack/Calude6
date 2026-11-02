@@ -87,6 +87,7 @@ export class Player {
     this.time += dt;
     const k = this.keys;
     const sprint = (((k.ShiftLeft || k.ShiftRight) && k.KeyW) || this.touchSprint) && !this.crouch && this.ads < 0.2 && this.reloading <= 0;
+    this.lastSprint = sprint;
     // ADS
     const adsTarget = this.adsHeld && !sprint && this.reloading <= 0 && this.alive ? 1 : 0;
     this.ads += (adsTarget - this.ads) * Math.min(1, dt * 12);

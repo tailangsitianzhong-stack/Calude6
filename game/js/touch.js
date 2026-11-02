@@ -110,6 +110,7 @@ export function setupTouch({ root, getPlayer, isPlaying, onPause }) {
   tap('#t-jump', () => { const p = P(); p.keys.Space = true; setTimeout(() => { p.keys.Space = false; }, 120); });
   tap('#t-mode', () => P().toggleMode());
   tap('#t-pause', () => onPause());
+  tap('#t-view', () => window.__toggleView && window.__toggleView());
 
   const crouchBtn = btn('#t-crouch');
   return {

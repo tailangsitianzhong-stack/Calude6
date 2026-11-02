@@ -299,6 +299,12 @@ def foot_state(rest, s, phi, P):
             A = place(flat_y, 0.0, None)
         toe_pitch = max(pitch, 0.0)
         lift = 0.0
+        if P.get("foot_pitch") is not None:             # ジャンプ：踵上げ／空中でつま先を伸ばす
+            pitch = rad(P["foot_pitch"])
+            lift = P.get("foot_lift", 0.0)
+            A = place(flat_y, pitch, "ball" if (pitch < 0 and lift < 1e-3) else None)
+            A.z += lift
+            toe_pitch = 0.0 if lift < 1e-3 else pitch * 0.6
     else:
         sw = (phi - D) / (1 - D)
         old = -strike + S * phi
@@ -429,6 +435,11 @@ GAITS = {
                   pitch_strike=0, pitch_off=0, heel_rock=0.1, heel_off=0.9, head_pitch=0.0,
                   arm_swing=0, arm_fwd=5, elbow=20, elbow_amp=0, abd=12, toe_out=18,
                   foot_y={1: -0.16, -1: 0.12}),
+    # ジャンプの基準姿勢（両足を肩幅に揃えて立つ）
+    "JumpBase": dict(T=40, stride=0.0, duty=1.0, strike_off=0.0, foot_x=0.11, drop=0.035, bob=0.0,
+                     sway=0.0, yaw=0.0, roll=0.0, lean=5.0, chest_yaw=0.0, lift=0.0,
+                     pitch_strike=0, pitch_off=0, heel_rock=0.1, heel_off=0.9, head_pitch=0.0,
+                     arm_swing=0, arm_fwd=2, elbow=18, elbow_amp=0, abd=12, toe_out=8),
     "Crouch": dict(T=36, stride=0.95, duty=0.64, strike_off=0.25, foot_x=0.13, drop=0.25, bob=0.012,
                    sway=0.03, yaw=4.0, roll=3.0, lean=24.0, chest_yaw=4.0, lift=0.05,
                    pitch_strike=12, pitch_off=28, heel_rock=0.16, heel_off=0.55, head_pitch=-12.0,
@@ -444,14 +455,18 @@ RIFLE_STYLE = {
     # 構えながら前進：照準線に目を合わせ、銃は水平に安定
     "Stand": dict(style="aim", pocket=V(-0.105, -0.155, 1.395), head_pitch=0.0, blade=-32,
                   stride_scale=1.0, drop_add=0.0, lean_add=0.0),
+    "JumpBase": dict(style="ready", pocket=V(-0.11, -0.165, 1.37), pitch=40, yaw=26, cant=6, blade=-20,
+                     head_pitch=0.0, stride_scale=1.0, drop_add=0.0, lean_add=0.0),
     "Crouch": dict(style="aim", pocket=V(-0.105, -0.155, 1.395), head_pitch=0.0, blade=-30,
                    stride_scale=0.85, drop_add=0.0, lean_add=-6.0),
 }
 
 
-def gait_pose(rest, name, phi, rifle):
+def gait_pose(rest, name, phi, rifle, over=None):
     P = dict(GAITS[name])
-    RS = RIFLE_STYLE[name] if rifle else None
+    if over:
+        P.update(over)
+    RS = dict(RIFLE_STYLE[name]) if rifle else None
     if RS:
         P["stride"] *= RS["stride_scale"]
         P["drop"] += RS["drop_add"]
@@ -683,6 +698,53 @@ def prone_pose(rest, phi, rifle):
 
 
 # ---------------------------------------------------------------------------
+# ジャンプ：踏み込み → 踏み切り → 空中（膝の引き付け） → 着地（衝撃吸収） → 立ち直り
+# 体の上昇はアーマチュアオブジェクトの Z（ルートモーション）に入れる
+# ---------------------------------------------------------------------------
+
+JUMP_T = 40
+JUMP_H = 0.42
+J_A, J_T, J_L, J_R = 0.22, 0.32, 0.72, 0.86      # 踏み込み終了・離地・着地・吸収終了
+
+
+def _seg(t, a, b):
+    return smooth((t - a) / (b - a))
+
+
+def jump_params(t):
+    """位相 t に対する骨盤の沈み・前傾・足の角度・足の持ち上げ・腕振り"""
+    if t < J_A:
+        d = _seg(t, 0, J_A)
+        return dict(drop=0.035 + 0.20 * d, lean=5 + 12 * d, foot_pitch=0.0, foot_lift=0.0, arm_fwd=2 - 32 * d, elbow=18 + 10 * d)
+    if t < J_T:
+        e = _seg(t, J_A, J_T)
+        return dict(drop=0.235 - 0.255 * e, lean=17 - 11 * e, foot_pitch=-38 * e, foot_lift=0.0, arm_fwd=-30 + 95 * e, elbow=28 - 8 * e)
+    if t < J_L:
+        a = (t - J_T) / (J_L - J_T)
+        tuck = math.sin(math.pi * a)
+        return dict(drop=-0.02 + 0.03 * tuck, lean=6 + 4 * tuck, foot_pitch=-38 + 26 * smooth(a), foot_lift=0.24 * tuck,
+                    arm_fwd=65 - 35 * smooth(a), elbow=20 + 15 * tuck)
+    if t < J_R:
+        l = _seg(t, J_L, J_R)
+        return dict(drop=-0.02 + 0.27 * l, lean=6 + 10 * l, foot_pitch=-12 * (1 - l), foot_lift=0.0, arm_fwd=30 - 8 * l, elbow=35 - 5 * l)
+    r = _seg(t, J_R, 1.0)
+    return dict(drop=0.25 - 0.215 * r, lean=16 - 11 * r, foot_pitch=0.0, foot_lift=0.0, arm_fwd=22 - 20 * r, elbow=30 - 12 * r)
+
+
+def jump_root_z(t):
+    if J_T <= t <= J_L:
+        a = (t - J_T) / (J_L - J_T)
+        return 4 * JUMP_H * a * (1 - a)
+    return 0.0
+
+
+def jump_pose(rest, t, rifle):
+    jp = jump_params(t)
+    over = dict(jp, bob=0.0, sway=0.0, yaw=0.0, roll=0.0, chest_yaw=0.0, head_pitch=-jp["lean"] * 0.6)
+    return gait_pose(rest, "JumpBase", 0.0, rifle, over)
+
+
+# ---------------------------------------------------------------------------
 # 被弾して倒れる（膝が崩れ → 前のめりに倒れる。銃は手から離れて地面へ）
 # ---------------------------------------------------------------------------
 
@@ -745,7 +807,7 @@ def action_fcurves(act):
     return out
 
 
-def bake(arm, rest, name, T, stride, fn, loop=True):
+def bake(arm, rest, name, T, stride, fn, loop=True, root_z=None):
     act = bpy.data.actions.get(name)
     if act:
         bpy.data.actions.remove(act)
@@ -780,6 +842,10 @@ def bake(arm, rest, name, T, stride, fn, loop=True):
     arm.keyframe_insert("location", index=1, frame=0, group="Root Motion")
     arm.location = (0, -stride, 0)
     arm.keyframe_insert("location", index=1, frame=T, group="Root Motion")
+    if root_z:
+        for f in range(T + 1):
+            arm.location = (0, 0, root_z(f / T))
+            arm.keyframe_insert("location", index=2, frame=f, group="Root Motion")
     arm.location = (0, 0, 0)
     for fc in action_fcurves(act):
         if fc.data_path == "location":
@@ -819,6 +885,10 @@ def make_all(arm=None, default="Walk_Rifle"):
                                lambda phi: gait_pose(rest, "Stand", phi, True)), GAITS["Stand"]["T"])
     made["Death"] = (bake(arm, rest, "Death", DEATH_T, 0.0, lambda phi: death_pose(rest, phi), loop=False),
                      DEATH_T)
+    for rifle in (False, True):
+        act_name = "Jump" + ("_Rifle" if rifle else "")
+        made[act_name] = (bake(arm, rest, act_name, JUMP_T, 0.0, lambda t, r=rifle: jump_pose(rest, t, r),
+                               loop=False, root_z=jump_root_z), JUMP_T)
     act, T = made[default]
     arm.animation_data.action = act
     scene.frame_start, scene.frame_end = 0, T * 4 - 1

@@ -8,6 +8,7 @@ import { Audio } from './audio.js';
 import { Player } from './player.js';
 import { EnemyManager } from './enemies.js';
 import { isTouchDevice, setupTouch } from './touch.js';
+import { Avatar } from './avatar.js';
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -56,23 +57,28 @@ camera.rotation.order = 'YXZ';
 
 // 空：煙で霞んだ夕方の曇天（地平線は茶色く、太陽は低い）
 const SUN_DIR = new THREE.Vector3(-0.55, 0.32, 0.45).normalize();
+// 空：天候ごとに色・雲・太陽の強さをユニフォームで切り替える
+const skyU = {
+  sun: { value: SUN_DIR }, hor: { value: new THREE.Color() }, mid: { value: new THREE.Color() }, top: { value: new THREE.Color() },
+  glow: { value: new THREE.Color() }, cloudCol: { value: new THREE.Color() }, cloudAmt: { value: 0 }, cloudCover: { value: 0 },
+  ground: { value: new THREE.Color() },
+};
 const sky = new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { sun: { value: SUN_DIR } },
+  side: THREE.BackSide, depthWrite: false, fog: false, uniforms: skyU,
   vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix*vec4(position,1.); gl_Position = projectionMatrix*p; }',
-  fragmentShader: `varying vec3 vDir; uniform vec3 sun;
+  fragmentShader: `varying vec3 vDir; uniform vec3 sun, hor, mid, top, glow, cloudCol, ground; uniform float cloudAmt, cloudCover;
     float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
     float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
     void main(){
       float y = vDir.y;
-      vec3 hor = vec3(0.62,0.55,0.47), mid = vec3(0.50,0.50,0.50), top = vec3(0.30,0.33,0.37);
       vec3 c = mix(hor, mid, smoothstep(0.0, 0.25, y)); c = mix(c, top, smoothstep(0.25, 0.9, y));
       float s = max(dot(vDir, sun), 0.0);
-      c += vec3(1.0,0.62,0.30) * (pow(s, 6.0) * 0.35 + pow(s, 80.0) * 0.9);
+      c += glow * (pow(s, 6.0) * 0.35 + pow(s, 80.0) * 0.9 + pow(s, 900.0) * 6.0);
       vec2 uv = vDir.xz / max(0.08, y + 0.15) * 1.6;
       float cl = n(uv) * 0.5 + n(uv * 2.3) * 0.3 + n(uv * 5.1) * 0.2;
-      c = mix(c, c * 0.72, smoothstep(0.45, 0.8, cl) * smoothstep(0.02, 0.3, y));
-      c = mix(vec3(0.42,0.37,0.32), c, smoothstep(-0.05, 0.06, y));
+      float m = smoothstep(cloudCover, cloudCover + 0.3, cl) * smoothstep(0.02, 0.3, y) * cloudAmt;
+      c = mix(c, cloudCol * (0.85 + 0.3 * n(uv * 3.7)), m);
+      c = mix(ground, c, smoothstep(-0.05, 0.06, y));
       gl_FragColor = vec4(c, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -91,6 +97,33 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 
+// 天候プリセット：くもり（煙で霞んだ夕方）／晴れ（高い太陽と青空、乾いた空気）
+const WEATHER = {
+  cloudy: {
+    sun: [-0.55, 0.32, 0.45], hor: 0x9e8c78, mid: 0x808080, top: 0x4d545e, glow: 0xff9e4d, cloudCol: 0x5c5a58, cloudAmt: 0.28, cloudCover: 0.45,
+    ground: 0x6b5e52, sunCol: 0xffcf98, sunI: 2.6, hemiSky: 0xbcb8ae, hemiGround: 0x4d4338, hemiI: 1.25, fog: 0x8c8376, fogD: 0.0088, exposure: 1.0,
+  },
+  sunny: {
+    sun: [-0.42, 0.66, 0.36], hor: 0xc9d3dc, mid: 0x86a9d4, top: 0x3d6fb6, glow: 0xfff2d6, cloudCol: 0xf4f2ee, cloudAmt: 0.85, cloudCover: 0.58,
+    ground: 0x8a7e6e, sunCol: 0xfff1dc, sunI: 3.4, hemiSky: 0xb3cbe8, hemiGround: 0x6e604c, hemiI: 1.05, fog: 0xb7c2cc, fogD: 0.0042, exposure: 1.02,
+  },
+};
+let weather = 'cloudy';
+function applyWeather(name) {
+  const W = WEATHER[name] || WEATHER.cloudy;
+  weather = name;
+  SUN_DIR.set(...W.sun).normalize();
+  for (const k of ['hor', 'mid', 'top', 'glow', 'cloudCol', 'ground']) skyU[k].value.set(W[k]);
+  skyU.cloudAmt.value = W.cloudAmt; skyU.cloudCover.value = W.cloudCover;
+  sun.color.set(W.sunCol); sun.intensity = W.sunI;
+  hemi.color.set(W.hemiSky); hemi.groundColor.set(W.hemiGround); hemi.intensity = W.hemiI;
+  scene.fog.color.set(W.fog); scene.fog.density = W.fogD;
+  renderer.toneMappingExposure = W.exposure;
+  if (typeof vmSun !== 'undefined') { vmSun.position.copy(SUN_DIR).multiplyScalar(10); vmSun.intensity = name === 'sunny' ? 2.4 : 1.8; }
+  document.querySelectorAll('[data-weather]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.weather === name)));
+  try { localStorage.setItem('rubble-weather', name); } catch (_) { /* 保存できない環境 */ }
+}
+
 // 一人称の銃は別パスで描く（壁にめり込まない）
 const vmScene = new THREE.Scene();
 const vmCamera = new THREE.PerspectiveCamera(72, camera.aspect, 0.01, 10);
@@ -101,6 +134,10 @@ vmScene.add(vmSun);
 // 金属（銃・装備）の映り込み用の環境マップ
 const envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 vmScene.environment = envMap;
+let savedWeather = 'cloudy';
+try { savedWeather = localStorage.getItem('rubble-weather') || 'cloudy'; } catch (_) { /* 読めない環境 */ }
+applyWeather(QS.get('weather') || savedWeather);
+document.querySelectorAll('[data-weather]').forEach((b) => b.addEventListener('click', () => applyWeather(b.dataset.weather)));
 const vmHolder = new THREE.Group();
 const vmRoot = new THREE.Group();
 vmHolder.add(vmRoot);
@@ -116,8 +153,8 @@ window.addEventListener('resize', () => {
 const progress = (p, text) => { ui.bar.style.width = `${Math.round(p * 100)}%`; if (text) ui.loadText.textContent = text; };
 const tick = () => new Promise((r) => requestAnimationFrame(() => r()));
 
-let world, nav, fx, audio, player, enemies;
-const state = { mode: 'loading', wave: 0, kills: 0, waveTimer: 0, time: 0, practice: false, attractT: 0 };
+let world, nav, fx, audio, player, enemies, avatar;
+const state = { thirdPerson: false, mode: 'loading', wave: 0, kills: 0, waveTimer: 0, time: 0, practice: false, attractT: 0 };
 
 async function load() {
   progress(0.05, 'テクスチャを生成中…');
@@ -138,7 +175,8 @@ async function load() {
     : new Promise((res, rej) => loader.load(url, res, (e) => { if (e.total) progress(w0 + (w1 - w0) * e.loaded / e.total); }, rej));
   // 配信先が .glb を扱えない場合は埋め込み glTF（.json）を使う（window.__ASSET_EXT で指定）
   const ext = window.__ASSET_EXT || '.glb';
-  const [soldier, vm] = await Promise.all([loadGLB('assets/soldier' + ext, 0.55, 0.9), loadGLB('assets/viewmodel' + ext, 0.9, 0.98)]);
+  const [soldier, vm, av] = await Promise.all([loadGLB('assets/soldier' + ext, 0.55, 0.85), loadGLB('assets/viewmodel' + ext, 0.85, 0.9),
+    loadGLB('assets/avatar' + ext, 0.9, 0.98)]);
   // ビューモデル
   vm.scene.traverse((o) => {
     if (o.isMesh) {
@@ -156,6 +194,11 @@ async function load() {
     if (o.isMesh) { o.material.envMap = envMap; o.material.envMapIntensity = 0.45; }
   });
   enemies = new EnemyManager(scene, soldier, world, nav, fx, audio, player);
+  av.scene.traverse((o) => { if (o.isMesh) { o.material.envMap = envMap; o.material.envMapIntensity = 0.45; } });
+  avatar = new Avatar(scene, av);
+  // 三人称のときは銃口をアバターの銃から
+  const fpMuzzle = player.muzzleWorld.bind(player);
+  player.muzzleWorld = () => (state.thirdPerson && avatar.muzzle()) || fpMuzzle();
   // 燃える車・遠景の煙柱
   for (const p of [[10, 0.2, -8], [-36, 0.3, 52], [36, 0.3, -70], [-80, 0.3, 36], [72, 0.3, 36]]) fx.fire(new THREE.Vector3(...p), 1);
   for (const p of [[-170, 0, -120], [150, 0, 160], [60, 0, -190], [-140, 0, 170], [190, 0, -40]]) fx.smokeColumn(new THREE.Vector3(...p), 1.4);
@@ -216,6 +259,7 @@ async function loadEmbedded(loader, url, onProgress) {
 
 // ---------------------------------------------------------------- 射撃判定
 function shoot(origin, dir) {
+  if (state.thirdPerson) origin = camera.position.clone();   // 三人称：画面中央（カメラ）から
   const eh = enemies.raycast(origin, dir, 300);
   const wh = world.raycast(origin, dir, 300);
   if (eh && (!wh || eh.t < wh.t)) {
@@ -251,6 +295,7 @@ document.addEventListener('keydown', (e) => {
   player.keys[e.code] = true;
   if (e.code === 'KeyR') player.reload();
   if (e.code === 'KeyB') player.toggleMode();
+  if (e.code === 'KeyV') toggleView();
   if (e.code === 'KeyC' || e.code === 'ControlLeft') player.crouch = !player.crouch;
   if (e.code === 'KeyZ') player.stance = player.stance === 2 ? 0 : 2;
   if (e.code === 'KeyX') player.cycleStance();
@@ -306,6 +351,33 @@ $('btn-resume').addEventListener('click', () => { ui.pause.hidden = true; state.
 $('btn-restart').addEventListener('click', () => startGame(state.practice));
 $('btn-menu').addEventListener('click', () => { ui.pause.hidden = true; ui.over.hidden = true; ui.hud.hidden = true; ui.menu.hidden = false; state.mode = 'menu'; });
 
+// 見学モードだけ三人称視点に切り替えられる
+function toggleView(force) {
+  if (!state.practice && !force) { banner('三人称視点は見学モードで使えます', 1.8); return; }
+  state.thirdPerson = force === undefined ? !state.thirdPerson : force;
+  avatar.root.visible = state.thirdPerson;
+  document.body.classList.toggle('third', state.thirdPerson);
+  if (force === undefined) banner(state.thirdPerson ? '三人称視点' : '一人称視点', 1.2);
+}
+window.__toggleView = toggleView;
+
+const _camTmp = new THREE.Vector3();
+function thirdPersonCamera(dt, sprint) {
+  avatar.update(dt, player, sprint);
+  const pivot = player.pos.clone().add(new THREE.Vector3(0, Math.max(0.6, player.eye * 0.95) + 0.12, 0));
+  const fwd = player.forward;
+  const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  const dist = 2.9 - player.ads * 1.4;
+  const want = pivot.clone().addScaledVector(fwd, -dist).addScaledVector(right, 0.55);
+  // 壁に埋まらないようにカメラを手前に寄せる
+  const dir = _camTmp.subVectors(want, pivot);
+  const len = dir.length();
+  dir.normalize();
+  const hit = world.raycast(pivot, dir, len);
+  const d = hit ? Math.max(0.3, hit.t - 0.25) : len;
+  camera.position.copy(pivot).addScaledVector(dir, d);
+}
+
 function startGame(practice) {
   audio.start();
   state.practice = practice;
@@ -319,12 +391,14 @@ function startGame(practice) {
   player.yaw = 0; player.pitch = 0;
   ui.menu.hidden = true; ui.over.hidden = true; ui.pause.hidden = true; ui.hud.hidden = false;
   touch?.reset();
+  toggleView(false);
+  document.body.classList.toggle('practice', practice);
   state.mode = 'play';
   if (practice) {
     // 見学モード：敵は撃ってこない。周囲に配置して観察できる
     for (let i = 0; i < 8; i++) enemies.spawn(nav.nodes[(i * 5 + 3) % nav.nodes.length].clone());
     for (const e of enemies.list) e.passive = true;
-    banner('見学モード：敵兵は攻撃してきません');
+    banner(TOUCH ? '見学モード：「視点」ボタンで三人称' : '見学モード：V キーで三人称視点');
   }
   lock();
 }
@@ -406,9 +480,11 @@ function update(dt) {
     camera.lookAt(Math.sin(a + 0.6) * 10, 2.5, Math.cos(a + 0.6) * 10);
     camera.fov = 60; camera.updateProjectionMatrix();
     for (const e of enemies.list) e.passive = true;
+    if (avatar) avatar.root.visible = false;
     enemies.update(dt);
   } else if (state.mode === 'play') {
     player.update(dt);
+    if (state.thirdPerson) thirdPersonCamera(dt, player.lastSprint);
     if (!state.practice) {
       if (enemies.alive === 0) {
         state.waveTimer -= dt;
@@ -435,7 +511,7 @@ function render() {
 
   renderer.clear();
   renderer.render(scene, camera);
-  if (state.mode === 'play' || state.mode === 'paused') {
+  if ((state.mode === 'play' || state.mode === 'paused') && !state.thirdPerson) {
     vmHolder.position.copy(camera.position);
     vmHolder.quaternion.copy(camera.quaternion);
     vmCamera.position.copy(camera.position);

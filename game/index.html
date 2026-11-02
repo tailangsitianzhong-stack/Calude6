@@ -48,6 +48,7 @@
     <button id="t-jump" data-btn aria-label="ジャンプ">跳ぶ</button>
     <button id="t-mode" data-btn aria-label="射撃モード切替">射撃切替</button>
     <button id="t-pause" data-btn aria-label="一時停止">II</button>
+    <button id="t-view" data-btn aria-label="視点切替">視点</button>
   </div>
 </div>
 <div id="rotate"><p>端末を横向きにしてください</p></div>
@@ -70,6 +71,11 @@
       <button id="btn-start" class="primary">出撃する</button>
       <button id="btn-practice">見学モード</button>
     </div>
+    <div class="weather" role="group" aria-label="天候">
+      <span>天候</span>
+      <button data-weather="cloudy" aria-pressed="true">くもり</button>
+      <button data-weather="sunny" aria-pressed="false">晴れ</button>
+    </div>
     <p id="touch-note" class="note" hidden>スマホは横向きで。左側をなぞって移動（前に大きく倒すと走る）、右側をなぞって視点。射撃ボタンは長押しで連射、押したまま動かすと狙いも動きます。姿勢ボタンは しゃがむ → 伏せる → 立つ の順に切り替わります。</p>
     <dl class="keys">
       <div><dt>W A S D</dt><dd>移動</dd></div>
@@ -83,6 +89,7 @@
       <div><dt>Space</dt><dd>ジャンプ</dd></div>
       <div><dt>R</dt><dd>リロード</dd></div>
       <div><dt>B</dt><dd>単発 / バースト / 連射</dd></div>
+      <div><dt>V</dt><dd>三人称視点（見学モード）</dd></div>
       <div><dt>Esc</dt><dd>一時停止</dd></div>
     </dl>
   </div>

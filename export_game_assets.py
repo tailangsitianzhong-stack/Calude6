@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TRI_TARGET = {
     "Body_Uniform": 22000, "Gloves": 3500, "Boots": 4000, "Boot_Laces": 800, "PlateCarrier": 3500,
     "Pouches": 2500, "Belt": 1200, "Belt_Gear": 1200, "KneePads": 1500, "Helmet": 5000,
-    "GasMask": 3500, "GasMask_Parts": 5000, "Ghost_NVG_Headset": 6000, "Rifle": 9000,
+    "GasMask": 3500, "GasMask_Parts": 5000, "Ghost_NVG_Headset": 7000, "Rifle": 9000,
 }
 TEX_SIZE = {"Body_Uniform": 2048, "Rifle": 1024}
 NORMAL_BAKE = {"Body_Uniform", "Gloves", "Boots", "PlateCarrier", "Helmet"}
@@ -268,6 +268,9 @@ def main():
         export_soldier(os.path.abspath(soldier), os.path.join(outdir, "soldier.glb"), motions)
     if only in ("all", "viewmodel"):
         export_viewmodel(os.path.abspath(ghost), os.path.join(outdir, "viewmodel.glb"), motions)
+    if only in ("all", "avatar"):
+        # 三人称視点用のプレイヤー（ゴースト版）
+        export_soldier(os.path.abspath(ghost), os.path.join(outdir, "avatar.glb"), motions)
 
 
 if __name__ == "__main__":
