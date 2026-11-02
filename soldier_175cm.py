@@ -4,6 +4,7 @@ Blender 用：身長175cmの男性軍人（フルフェイス軍用マスク着�
 使い方
   GUI   : Blender の Scripting タブでこのファイルを開いて「Run Script」
   CLI   : blender --background --python soldier_175cm.py -- --save soldier.blend --render renders
+          （同じフォルダの soldier_motions.py があればモーションも自動で追加。不要なら --no-motions）
           ゴーストマスク版: ... -- --variant ghost --save soldier_ghost.blend
           （GUI で実行する場合はファイル末尾の DEFAULT_VARIANT を "ghost" に変更）
   bpy   : python soldier_175cm.py --save soldier.blend --render renders
@@ -386,7 +387,22 @@ def weave_bump(nt, co, scale=314.0, strength=0.15, normal=None):
     return bump(nt, w, strength, 0.0003, normal)
 
 
-def build_materials():
+THEMES = {
+    # 砂漠系マルチカム + コヨーテ装備
+    "multicam": dict(
+        camo=["#56573A", "#8A7A5C", "#A2936F", "#6A5137", "#4E5034"], camo_dark="#33291D", grime="#4A4234",
+        gear="#7E6243", gear_dark="#4F3D29", molle="#3A2C1D", webbing="#4C4232",
+        helmet=("#8A7356", "#5E4C38"), gloves=("#3A3A31", "#1E1E1A"), boot=("#7D6548", "#4E3E2C")),
+    # 参考画像のような黒一色の特殊部隊装備（生地の擦れで微妙な濃淡）
+    "black": dict(
+        camo=["#111214", "#16171A", "#1B1C1F", "#141517", "#0F1012"], camo_dark="#0B0B0C", grime="#26262A",
+        gear="#141416", gear_dark="#0A0A0B", molle="#060607", webbing="#101011",
+        helmet=("#19191B", "#0D0D0E"), gloves=("#111111", "#080808"), boot=("#141413", "#0A0A09"), sheen=0.12),
+}
+
+
+def build_materials(theme="multicam"):
+    T = THEMES[theme]
     M = {}
 
     # --- 迷彩戦闘服（マルチカム系の多色迷彩） ---
@@ -394,8 +410,8 @@ def build_materials():
     co = texcoord(nt)
     n1 = noise(nt, co, 6.0, 4.0, 0.55, 0.8)
     base = ramp(nt, n1, [
-        (0.0, srgb("#56573A")), (0.40, srgb("#8A7A5C")), (0.53, srgb("#A2936F")),
-        (0.59, srgb("#6A5137")), (0.65, srgb("#4E5034")),
+        (0.0, srgb(T["camo"][0])), (0.40, srgb(T["camo"][1])), (0.53, srgb(T["camo"][2])),
+        (0.59, srgb(T["camo"][3])), (0.65, srgb(T["camo"][4])),
     ])
     co2 = nt.nodes.new("ShaderNodeVectorMath")
     co2.operation = "ADD"
@@ -403,12 +419,12 @@ def build_materials():
     co2.inputs[1].default_value = (13.7, 5.1, 9.3)
     n2 = noise(nt, co2.outputs[0], 14.0, 3.0, 0.5, 0.5)
     speck = ramp(nt, n2, [(0.0, (0, 0, 0, 1)), (0.66, (1, 1, 1, 1))])
-    col = mix_rgb(nt, math_op(nt, "MULTIPLY", speck_to_val(nt, speck), 0.9), base, srgb("#33291D"))
+    col = mix_rgb(nt, math_op(nt, "MULTIPLY", speck_to_val(nt, speck), 0.9), base, srgb(T["camo_dark"]))
     grime = noise(nt, co, 30.0, 6.0, 0.6)
-    col = mix_rgb(nt, math_op(nt, "MULTIPLY", grime, 0.18), col, srgb("#4A4234"))
+    col = mix_rgb(nt, math_op(nt, "MULTIPLY", grime, 0.18), col, srgb(T["grime"]))
     nt.links.new(col, b.inputs["Base Color"])
     sset(b, "Roughness", 0.92)
-    sset(b, "Sheen Weight", 0.35)
+    sset(b, "Sheen Weight", T.get("sheen", 0.35))
     sset(b, "Sheen Roughness", 0.6)
     nrm = weave_bump(nt, co, 314.0, 0.12)
     wr = noise(nt, co, 11.0, 4.0, 0.55, 0.5)
@@ -431,12 +447,12 @@ def build_materials():
         m, nt, b = new_mat(name)
         co = texcoord(nt)
         var = noise(nt, co, 18.0, 4.0, 0.6)
-        col = mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.25), srgb(hexcol), srgb("#4F3D29"))
+        col = mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.25), srgb(hexcol), srgb(T["gear_dark"]))
         nrm = weave_bump(nt, co, 250.0, 0.2)
         if molle:
             bands = wave(nt, co, 8.27, "Z")  # 約3.8cm周期 = MOLLE 1インチ帯+隙間
             band = math_op(nt, "GREATER_THAN", bands, 0.38)
-            col = mix_rgb(nt, math_op(nt, "MULTIPLY", band, 0.18), col, srgb("#3A2C1D"))
+            col = mix_rgb(nt, math_op(nt, "MULTIPLY", band, 0.18), col, srgb(T["molle"]))
             nrm = bump(nt, band, 0.5, 0.0015, nrm)
         nt.links.new(col, b.inputs["Base Color"])
         nt.links.new(nrm, b.inputs["Normal"])
@@ -444,9 +460,9 @@ def build_materials():
         sset(b, "Sheen Weight", 0.2)
         return m
 
-    M["vest"] = gear("Gear_Coyote_MOLLE", "#7E6243", True)
-    M["gear"] = gear("Gear_Coyote", "#7E6243", False)
-    M["webbing"] = gear("Webbing_Dark", "#4C4232", False)
+    M["vest"] = gear("Gear_MOLLE", T["gear"], True)
+    M["gear"] = gear("Gear", T["gear"], False)
+    M["webbing"] = gear("Webbing", T["webbing"], False)
 
     # --- 樹脂（ホルスター・レール・マガジン等） ---
     m, nt, b = new_mat("Polymer_Black")
@@ -460,7 +476,7 @@ def build_materials():
     m, nt, b = new_mat("Helmet_Coyote")
     co = texcoord(nt)
     var = noise(nt, co, 25.0, 3.0)
-    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.2), srgb("#8A7356"), srgb("#5E4C38")),
+    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.2), srgb(T["helmet"][0]), srgb(T["helmet"][1])),
                  b.inputs["Base Color"])
     sset(b, "Roughness", 0.78)
     nt.links.new(bump(nt, noise(nt, co, 450.0, 2.0), 0.25, 0.0004), b.inputs["Normal"])
@@ -488,7 +504,7 @@ def build_materials():
     m, nt, b = new_mat("Gloves")
     co = texcoord(nt)
     var = noise(nt, co, 60.0, 3.0)
-    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.3), srgb("#3A3A31"), srgb("#1E1E1A")),
+    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.3), srgb(T["gloves"][0]), srgb(T["gloves"][1])),
                  b.inputs["Base Color"])
     sset(b, "Roughness", 0.75)
     nt.links.new(bump(nt, noise(nt, co, 500.0, 2.0), 0.2, 0.0003), b.inputs["Normal"])
@@ -498,7 +514,7 @@ def build_materials():
     m, nt, b = new_mat("Boot_Suede")
     co = texcoord(nt)
     var = noise(nt, co, 40.0, 5.0, 0.6)
-    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.35), srgb("#7D6548"), srgb("#4E3E2C")),
+    nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.35), srgb(T["boot"][0]), srgb(T["boot"][1])),
                  b.inputs["Base Color"])
     sset(b, "Roughness", 0.95)
     sset(b, "Sheen Weight", 0.3)
@@ -511,6 +527,20 @@ def build_materials():
     sset(b, "Roughness", 0.7)
     nt.links.new(bump(nt, wave(nt, co, 40.0, "Y", 3.0), 0.6, 0.002), b.inputs["Normal"])
     M["sole"] = m
+
+    # --- 銃：アルマイト金属 / 樹脂ファニチャー / アルミマガジン ---
+    for key, name, col, metal, rough in (("gunmetal", "Gun_Anodized", "#1E1F21", 0.6, 0.42),
+                                         ("gun_polymer", "Gun_Polymer", "#171717", 0.0, 0.6),
+                                         ("magazine", "Gun_Magazine", "#5D5E5E", 0.75, 0.48)):
+        m, nt, b = new_mat(name)
+        co = texcoord(nt)
+        var = noise(nt, co, 80.0, 4.0)
+        nt.links.new(mix_rgb(nt, math_op(nt, "MULTIPLY", var, 0.25), srgb(col), srgb("#0C0C0C")),
+                     b.inputs["Base Color"])
+        sset(b, "Metallic", metal)
+        sset(b, "Roughness", rough)
+        nt.links.new(bump(nt, noise(nt, co, 1200.0, 2.0), 0.06, 0.0001), b.inputs["Normal"])
+        M[key] = m
 
     # --- 地面（コンクリート） ---
     m, nt, b = new_mat("Ground_Concrete")
@@ -1159,40 +1189,81 @@ def ellipsoid_on_axis(bm, center, axis, r, depth, mat=0):
 # ゴーストマスク版（スカル柄バラクラバ + シューティンググラス + ヘッドセット）
 # ---------------------------------------------------------------------------
 
-SKULL_X0, SKULL_W = -0.085, 0.17     # 顔の正面投影範囲（オブジェクト座標）
-SKULL_Z0, SKULL_H = 1.50, 0.21
+SKULL_X0, SKULL_W = -0.115, 0.23     # 顔の正面投影範囲（オブジェクト座標）
+SKULL_Z0, SKULL_H = 1.495, 0.23
 
 
-def make_skull_image(res=512):
-    """顔正面に投影するスカル柄マスク画像を手続き生成（白=骨の柄）"""
+def make_skull_image(res=768):
+    """顔正面に投影するスカル柄（陰影付きグレースケール：0=黒地, 1=骨の白）を手続き生成。
+    頭部メッシュの目・鼻・口の位置に合わせて、眼窩・鼻腔・頬骨・上下の歯・下顎を描く。"""
     import numpy as np
     u = (np.arange(res) + 0.5) / res
     X, Z = np.meshgrid(SKULL_X0 + u * SKULL_W, SKULL_Z0 + u * SKULL_H)
     ax = np.abs(X)
+    px = SKULL_W / res
 
-    def ell(cx, cz, rx, rz):
-        return ((X - cx) / rx) ** 2 + ((Z - cz) / rz) ** 2 < 1.0
-    white = ell(0, 1.66, 0.074, 0.075) | ell(0, 1.615, 0.066, 0.045)
-    jaw = (Z > 1.527) & (Z < 1.60) & (ax < 0.047 + (Z - 1.527) * 0.25) & \
-        (((ax / 0.05) ** 2 + ((Z - 1.565) / 0.04) ** 2 < 1.0) | (Z > 1.565))
-    white |= jaw
-    black = (((ax - 0.032) / 0.024) ** 2 + ((Z - 1.656) / 0.021) ** 2 < 1.0)      # 眼窩
-    nz = (Z > 1.600) & (Z < 1.632)
-    black |= nz & (ax < 0.0025 + (1.632 - Z) * 0.42) & ~((ax < 0.0012) & (Z > 1.606))  # 鼻腔
-    black |= (Z > 1.557) & (Z < 1.602) & (ax < 0.031)                              # 口
-    black |= (ax > 0.047) & (ax < 0.058) & (Z > 1.572) & (Z < 1.606)               # 頬と顎の隙間
-    teeth = (ax < 0.027) & (((Z > 1.583) & (Z < 1.599)) | ((Z > 1.560) & (Z < 1.577)))
-    teeth &= ~(np.mod(X + 0.00375, 0.0075) < 0.0011)                              # 歯の隙間
-    teeth &= ~((ax > 0.022) & ((Z > 1.595) | (Z < 1.564)))
-    m = (white & ~black) | teeth
-    m = m.astype(np.float32)
-    # 縁をぼかし、プリントのかすれを加える
-    for _ in range(2):
-        m = (m + np.roll(m, 1, 0) + np.roll(m, -1, 0) + np.roll(m, 1, 1) + np.roll(m, -1, 1)) / 5.0
+    def soft(f, scale):          # f<0 が内側の陰関数 → アンチエイリアス付きマスク
+        return np.clip(0.5 - f * scale / (1.5 * px), 0.0, 1.0)
+
+    def ell(cx, cz, rx, rz, n=2.0, xs=None):
+        xx = (ax if xs is None else xs) - cx
+        f = (np.abs(xx / rx) ** n + np.abs((Z - cz) / rz) ** n) ** (1.0 / n) - 1.0
+        return f, min(rx, rz)
+
+    def mask(cx, cz, rx, rz, n=2.0, xs=None):
+        f, r = ell(cx, cz, rx, rz, n, xs)
+        return soft(f, r)
+
+    def smooth(a, lo, hi):
+        t = np.clip((a - lo) / (hi - lo), 0.0, 1.0)
+        return t * t * (3 - 2 * t)
+
+    # --- 輪郭：頭蓋 + 頬 + 下顎
+    cran = mask(0, 1.672, 0.074, 0.075)
+    cheek = mask(0, 1.618, 0.066, 0.042, 2.4)
+    jw = 0.021 + 0.031 * smooth(Z, 1.521, 1.572)                      # 顎先は細く、エラで広がる
+    jaw = soft(ax - jw, 1.0) * smooth(Z, 1.519, 1.526) * (1 - smooth(Z, 1.60, 1.61))
+    chin = mask(0, 1.531, 0.024, 0.012)
+    sil = np.maximum.reduce([cran, cheek, jaw, chin])
+    # 骨の陰影：輪郭付近とこめかみを暗く
+    f_c, _ = ell(0, 1.64, 0.072, 0.10)
+    bone = 0.95 - 0.35 * smooth(f_c, -0.25, 0.05) - 0.18 * smooth(ax, 0.055, 0.075)
+    # --- 眼窩（外側がやや下がった角丸の穴）と周囲のグラデーション
+    cz = 1.655 - (ax - 0.0335) * 0.15                                   # 外側がやや下がる
+    fs = (np.abs((ax - 0.0335) / 0.023) ** 2.6 + np.abs((Z - cz) / 0.0205) ** 2.6) ** (1 / 2.6) - 1.0
+    sock = soft(fs, 0.0205)
+    rim = 1.0 - smooth(fs, 0.0, 0.45)                                   # 眼窩縁の落ち込み
+    brow = mask(0.03, 1.684, 0.03, 0.007)                               # 眉弓のハイライト
+    # --- 鼻腔（逆ハート）
+    nose = np.maximum(mask(0.0065, 1.614, 0.0085, 0.012), mask(0, 1.627, 0.0055, 0.012))
+    fn = np.minimum(ell(0.0065, 1.614, 0.0085, 0.012)[0], ell(0, 1.627, 0.0055, 0.012)[0])
+    nose_rim = 1.0 - smooth(fn, 0.0, 0.6)
+    # --- 頬骨下の影と下顎の切れ目
+    zyg = mask(0.052, 1.612, 0.016, 0.010) * (1 - mask(0.048, 1.62, 0.014, 0.009))
+    ramus = soft(np.abs(ax - 0.047) - 0.0012, 1.0) * smooth(Z, 1.565, 1.57) * (1 - smooth(Z, 1.60, 1.605))
+    # --- 歯（上下2列、外側ほど小さく、弧を描く）
+    curve = (ax / 0.03) ** 2 * 0.004
+    mouth = soft(ax - 0.031, 1.0) * smooth(Z, 1.557 + curve, 1.559 + curve) * \
+        (1 - smooth(Z, 1.601 - curve, 1.603 - curve))
+    tw = 0.0068 + 0.0012 * np.cos(np.clip(ax / 0.03, 0, 1) * math.pi / 2)
+    phase = np.mod(ax, tw) / tw
+    gaps = soft(np.minimum(phase, 1 - phase) * tw - 0.00045, 1.0)
+    up_row = smooth(Z, 1.5815 + curve, 1.583 + curve) * (1 - smooth(Z, 1.5985 - curve, 1.600 - curve))
+    lo_row = smooth(Z, 1.5605 + curve, 1.562 + curve) * (1 - smooth(Z, 1.5795 + curve, 1.581 + curve))
+    teeth = (up_row + lo_row) * (1 - gaps) * soft(ax - 0.027, 1.0)
+    tooth_shade = 0.9 - 0.25 * smooth(ax, 0.012, 0.027)
+
+    v = sil * bone
+    v = v * (1 - 0.55 * rim) + 0.12 * brow * sil
+    v = v * (1 - sock)
+    v = v * (1 - 0.4 * nose_rim) * (1 - nose)
+    v = v * (1 - 0.6 * zyg) * (1 - 0.85 * ramus)
+    v = v * (1 - mouth) + teeth * tooth_shade
     rng = np.random.default_rng(7)
     grain = rng.random((res, res)).astype(np.float32)
-    m *= 0.82 + 0.18 * grain
-    rgba = np.stack([m, m, m, np.ones_like(m)], axis=-1)
+    blot = np.repeat(np.repeat(rng.random((res // 16, res // 16)), 16, 0), 16, 1)[:res, :res]
+    v = np.clip(v * (0.86 + 0.1 * grain + 0.06 * blot), 0, 1).astype(np.float32)
+    rgba = np.stack([v, v, v, np.ones_like(v)], axis=-1)
     img = bpy.data.images.new("SkullPrint", res, res, alpha=False)
     img.colorspace_settings.name = "Non-Color"   # 先に設定（後で変えるとピクセルが破棄される）
     img.pixels.foreach_set(rgba.ravel())
@@ -1233,34 +1304,31 @@ def skull_material():
 def build_ghost(M, head_bvh):
     bm = bmesh.new()
     PL, LN = 0, 1
-    # シューティンググラス（一枚レンズのラップアラウンド）
-    C2 = V(0.0, 0.0, 1.655)
-    a, b_ = 0.091, 0.13
-    nu, nv = 41, 9
-    P, D = [], []
-    for i in range(nu):
-        P.append([]), D.append([])
-        for j in range(nv):
-            t = j / (nv - 1)                       # 0=下端, 1=上端
-            h = lerp(-0.019, 0.017, t)
-            phmax = 72.0 - 14.0 * (1 - t) ** 2
-            ph = math.radians(lerp(-phmax, phmax, i / (nu - 1)))
-            dn = V(math.sin(ph) / a ** 2, -math.cos(ph) / b_ ** 2, 0.0).normalized()
-            P[-1].append(C2 + V(a * math.sin(ph), -b_ * math.cos(ph) + h * 0.12, h))
-            D[-1].append(dn)
-    solid_grid(bm, P, D, 0.0, 0.0022, mat=LN)
-    # 上部フレームとテンプル
-    keys = []
-    for k in range(25):
-        ph = math.radians(lerp(-74, 74, k / 24))
-        p = C2 + V((a + 0.002) * math.sin(ph), -(b_ + 0.002) * math.cos(ph) + 0.002, 0.018)
-        keys.append((p.x, p.y, p.z, 0.0035, 0.0028))
-    loft(bm, keys, V(0, 0, 1), segs=10, n=3.0, sub=2, mat=PL)
-    for s in (1, -1):
-        p0 = C2 + V(s * a * math.sin(math.radians(72)), -b_ * math.cos(math.radians(72)), 0.012)
-        loft(bm, [(p0.x, p0.y, p0.z, 0.0025, 0.004), (s * 0.084, 0.0, 1.664, 0.0022, 0.0035),
-                  (s * 0.083, 0.045, 1.655, 0.002, 0.003), (s * 0.078, 0.065, 1.635, 0.002, 0.003)],
-             V(1, 0, 0), segs=8, n=3.0, sub=3, mat=PL)
+    # 4眼ナイトビジョン（跳ね上げ収納状態）
+    sp, sn = helmet_pt(0.0, e_cut(0.0) + 0.09, 0.017)
+    up = (V(0, 0, 1) - sn * sn.z).normalized()
+    side = sn.cross(up).normalized()                     # キャラクターの右(-X)方向
+    mount = sp + sn * 0.014 - up * 0.004
+    box(bm, mount, (0.03, 0.02, 0.036), R=Matrix((side, sn, up)).transposed(), mat=PL)   # マウント
+    tube_dir = (up * 0.62 + sn * 0.78).normalized()       # 跳ね上げ状態：管は前上方を向く
+    fwd = side.cross(tube_dir).normalized()
+    if fwd.dot(sn) < 0:
+        fwd = -fwd
+    base = mount + sn * 0.026 + up * 0.014
+    Rb = Matrix((side, fwd, tube_dir)).transposed()
+    box(bm, base, (0.12, 0.028, 0.026), R=Rb, mat=PL)                                    # ブリッジ
+    for k, (dx, ang, r, ln) in enumerate(((-0.05, 22, 0.0135, 0.07), (-0.0175, 4, 0.0155, 0.082),
+                                          (0.0175, -4, 0.0155, 0.082), (0.05, -22, 0.0135, 0.07))):
+        d = (Matrix.Rotation(math.radians(ang), 3, fwd) @ tube_dir).normalized()
+        p0 = base + side * dx
+        cylinder(bm, p0 + d * (ln / 2), d, r, r * 0.97, ln, segs=28, mat=PL)
+        cylinder(bm, p0 + d * (ln - 0.004), d, r * 1.08, r * 1.08, 0.012, segs=28, mat=PL)  # 先端リング
+        ellipsoid_on_axis(bm, p0 + d * (ln + 0.002), d, r * 0.82, 0.003, mat=LN)          # 対物レンズ
+        cylinder(bm, p0 - d * 0.012, d, r * 0.85, r * 0.9, 0.02, segs=24, mat=PL)        # 接眼部
+    cyl_from = base - side * 0.07
+    hp, _ = helmet_pt(math.pi * 0.62, 0.5, 0.012)
+    loft(bm, [(*cyl_from, 0.003, 0.003), (*(cyl_from + V(-0.01, 0.03, 0.02)), 0.003, 0.003),
+              (*hp, 0.003, 0.003)], V(0, 0, 1), segs=8, sub=4, mat=PL)                    # 電源ケーブル
     # ヘッドセット（イヤーカップ + ブームマイク）
     for s in (1, -1):
         c = V(s * 0.1, 0.008, 1.633)
@@ -1279,8 +1347,143 @@ def build_ghost(M, head_bvh):
             mouth + V(0.026, -0.022, 0.0)]
     loft(bm, [(*p, 0.0028, 0.0028) for p in boom], V(0, 0, 1), segs=10, sub=4, mat=PL)
     ellipsoid(bm, boom[-1] + V(-0.008, 0.0, 0.0), (0.012, 0.009, 0.009), mat=PL)     # マイクスポンジ
-    return make_obj("Ghost_Glasses_Headset", bm, [M["polymer"], M["lens"]],
+    return make_obj("Ghost_NVG_Headset", bm, [M["polymer"], M["lens"]],
                     mods=[("BEVEL", dict(width=0.0008, segments=2, limit_method="ANGLE"))])
+
+
+# ---------------------------------------------------------------------------
+# ライフル（M16A2 タイプ：固定A2ストック、キャリングハンドル、丸型リブ付きハンドガード）
+# ライフルのローカル座標：+X=銃口方向, +Y=銃の左側, +Z=上（照準側）。原点=床尾板の後端・銃身軸の高さ
+# ---------------------------------------------------------------------------
+
+RIFLE_PTS = {
+    "butt": V(0.004, 0.0, -0.035),       # 肩付けする床尾の中心
+    "grip": V(0.356, 0.0, -0.100),       # 右手（グリップ握りの中心）
+    "grip_axis": V(-0.04, 0.0, -0.11).normalized(),
+    "guard_min": 0.575, "guard_max": 0.78,   # 左手で握れるハンドガード範囲（X）
+    "guard_z": 0.0,
+    "eye": V(0.235, 0.0, 0.088),         # 照準線上の目の位置（キャリングハンドルの照門の後方）
+    "muzzle": V(1.006, 0.0, 0.0),
+    "upper_swivel": V(0.875, 0.0, -0.04),
+}
+
+
+def ribbed_tube(bm, x0, x1, r0, r1, z=0.0, ribs=14, depth=0.08, segs=56, rings=24, mat=0):
+    """長手方向のリブ（溝）が入った丸パイプ（A2 ハンドガード）"""
+    rows = []
+    for i in range(rings + 1):
+        t = i / rings
+        x = lerp(x0, x1, t)
+        r = lerp(r0, r1, t)
+        row = []
+        for j in range(segs):
+            a = 2 * math.pi * j / segs
+            rr = r * (1.0 - depth * max(0.0, math.cos(ribs * a)) ** 6)
+            row.append(bm.verts.new(V(x, rr * math.cos(a), z + rr * math.sin(a))))
+        rows.append(row)
+    fs = []
+    for r0_, r1_ in zip(rows, rows[1:]):
+        for j in range(segs):
+            j1 = (j + 1) % segs
+            fs.append(bm.faces.new((r0_[j], r1_[j], r1_[j1], r0_[j1])))
+    for row in (rows[0], rows[-1]):
+        fs.append(bm.faces.new(row))
+    for f in fs:
+        f.material_index = mat
+        f.smooth = True
+
+
+def prism(bm, pts2d, y_half, mat=0):
+    """XZ 平面の多角形を Y 方向に押し出した板（照星・用心金など）"""
+    a = [bm.verts.new(V(x, -y_half, z)) for x, z in pts2d]
+    b = [bm.verts.new(V(x, y_half, z)) for x, z in pts2d]
+    fs = [bm.faces.new(a[::-1]), bm.faces.new(b)]
+    n = len(pts2d)
+    for i in range(n):
+        j = (i + 1) % n
+        fs.append(bm.faces.new((a[i], a[j], b[j], b[i])))
+    for f in fs:
+        f.material_index = mat
+        f.smooth = True
+    bmesh.ops.recalc_face_normals(bm, faces=fs)
+
+
+def build_rifle(M):
+    bm = bmesh.new()
+    MT, PO, MG = 0, 1, 2       # 金属（アルマイト）/ 樹脂 / マガジン
+    Y = V(0, 1, 0)
+    # ストック（A2 固定式）
+    loft(bm, [(0.000, 0, -0.040, 0.0225, 0.066), (0.020, 0, -0.040, 0.023, 0.066),
+              (0.120, 0, -0.033, 0.022, 0.053), (0.230, 0, -0.022, 0.0195, 0.037),
+              (0.300, 0, -0.013, 0.018, 0.027)], Y, segs=32, n=4.0, mat=PO)
+    box(bm, V(-0.003, 0, -0.040), (0.008, 0.047, 0.134), mat=MT)                         # 床尾板
+    torus(bm, V(0.035, 0, -0.112), V(0, 1, 0), 0.009, 0.0018, seg=20, rseg=6, mat=MT)    # 後部スイベル
+    # ロワーレシーバー
+    box(bm, V(0.418, 0, -0.031), (0.236, 0.026, 0.048), mat=MT)
+    prism(bm, [(0.445, -0.05), (0.52, -0.05), (0.522, -0.086), (0.447, -0.086)], 0.0155, mat=MT)  # マガジンウェル
+    for zz in (-0.08, -0.0745):                                                            # 用心金（上下2本で枠）
+        box(bm, V(0.408, 0, zz), (0.07, 0.008, 0.004), mat=MT)
+    box(bm, V(0.441, 0, -0.066), (0.004, 0.008, 0.03), mat=MT)
+    prism(bm, [(0.402, -0.053), (0.408, -0.053), (0.406, -0.072), (0.399, -0.070)], 0.003, mat=MT)  # 引き金
+    cylinder(bm, V(0.39, 0.016, -0.025), Y, 0.007, 0.007, 0.004, segs=16, mat=MT)          # セレクター
+    box(bm, V(0.398, 0.019, -0.022), (0.022, 0.003, 0.006), mat=MT)
+    cylinder(bm, V(0.448, -0.015, -0.035), Y, 0.005, 0.005, 0.004, segs=12, mat=MT)         # マグキャッチ
+    # グリップ
+    g0, g1 = V(0.378, 0, -0.045), V(0.333, 0, -0.158)
+    loft(bm, [(*g0, 0.0145, 0.019), (*lerp(g0, g1, 0.5), 0.0145, 0.019), (*g1, 0.014, 0.018)],
+         Y, segs=24, n=3.5, sub=3, mat=PO)
+    for t in (0.35, 0.62):                                                                 # フィンガーグルーブ
+        ellipsoid(bm, lerp(g0, g1, t) + V(0.017, 0, 0), (0.006, 0.0135, 0.009), mat=PO)
+    # アッパーレシーバー
+    loft(bm, [(0.300, 0, 0.010, 0.0155, 0.024), (0.535, 0, 0.010, 0.0155, 0.024)], Y,
+         segs=24, n=4.5, sub=1, mat=MT)
+    box(bm, V(0.427, -0.016, 0.007), (0.068, 0.003, 0.022), mat=MT)                        # 排莢口カバー
+    ellipsoid(bm, V(0.40, -0.019, 0.022), (0.012, 0.007, 0.008), mat=MT)                   # 薬莢デフレクター
+    cylinder(bm, V(0.462, -0.024, 0.02), V(0.6, -1, 0), 0.008, 0.007, 0.03, segs=16, mat=MT)  # フォワードアシスト
+    box(bm, V(0.31, 0, 0.03), (0.026, 0.05, 0.008), mat=MT)                                 # チャージングハンドル
+    # キャリングハンドル + 照門
+    box(bm, V(0.415, 0, 0.073), (0.165, 0.016, 0.014), mat=MT)
+    box(bm, V(0.488, 0, 0.051), (0.024, 0.02, 0.034), mat=MT)
+    box(bm, V(0.352, 0, 0.06), (0.05, 0.022, 0.054), mat=MT)
+    box(bm, V(0.352, 0, 0.093), (0.016, 0.012, 0.012), mat=MT)                              # 照門アパーチャ
+    cylinder(bm, V(0.37, 0, 0.073), Y, 0.009, 0.009, 0.034, segs=20, mat=MT)               # 照準調整ノブ
+    cylinder(bm, V(0.352, 0, 0.083), Y, 0.009, 0.009, 0.028, segs=20, mat=MT)
+    # デルタリング + ハンドガード
+    cylinder(bm, V(0.545, 0, 0.0), V(1, 0, 0), 0.036, 0.036, 0.022, segs=40, mat=MT)
+    ribbed_tube(bm, 0.556, 0.815, 0.0315, 0.0285, mat=PO)
+    cylinder(bm, V(0.82, 0, 0.0), V(1, 0, 0), 0.027, 0.025, 0.012, segs=36, mat=MT)       # ハンドガードキャップ
+    # 銃身・照星・消炎器
+    cylinder(bm, V(0.91, 0, 0.0), V(1, 0, 0), 0.0095, 0.0088, 0.18, segs=24, mat=MT)
+    box(bm, V(0.872, 0, 0.0), (0.03, 0.026, 0.032), mat=MT)                                 # 照星基部
+    prism(bm, [(0.853, 0.012), (0.891, 0.012), (0.876, 0.07), (0.866, 0.07)], 0.006, mat=MT)
+    for yy in (0.0085, -0.0085):                                                             # 照星ガード（耳）
+        bmy = bmesh.new()
+        prism(bmy, [(0.862, 0.055), (0.878, 0.055), (0.877, 0.086), (0.864, 0.086)], 0.0015)
+        bmesh.ops.translate(bmy, verts=bmy.verts, vec=V(0, yy, 0))
+        tmp = bpy.data.meshes.new("tmp")
+        bmy.to_mesh(tmp)
+        bmy.free()
+        bm.from_mesh(tmp)
+        bpy.data.meshes.remove(tmp)
+    box(bm, V(0.871, 0, 0.083), (0.003, 0.003, 0.016), mat=MT)                               # 照星ポスト
+    box(bm, V(0.872, 0, -0.026), (0.02, 0.012, 0.02), mat=MT)                                # 着剣ラグ
+    torus(bm, V(0.872, 0, -0.045), Y, 0.01, 0.0018, seg=20, rseg=6, mat=MT)                 # 前部スイベル
+    cylinder(bm, V(0.988, 0, 0.0), V(1, 0, 0), 0.011, 0.011, 0.036, segs=24, mat=MT)       # 消炎器
+    for k in range(5):
+        a = math.radians(-60 + k * 30) + math.pi / 2
+        box(bm, V(0.992, 0.0105 * math.cos(a), 0.0105 * math.sin(a)), (0.022, 0.002, 0.002),
+            R=Matrix.Rotation(a - math.pi / 2, 3, "X"), mat=PO)
+    # 30連マガジン（湾曲）
+    keys = []
+    for k in range(7):
+        t = k / 6
+        keys.append((0.484 + 0.045 * t * t, 0, -0.07 - 0.19 * t, 0.0125, 0.032))
+    loft(bm, keys, Y, segs=24, n=6.0, sub=2, mat=MG)
+    box(bm, V(0.532, 0, -0.262), (0.075, 0.03, 0.012),
+        R=Matrix.Rotation(math.radians(-18), 3, "Y"), mat=MG)                                 # 底板
+    ob = make_obj("Rifle", bm, [M["gunmetal"], M["gun_polymer"], M["magazine"]],
+                  mods=[("BEVEL", dict(width=0.0012, segments=2, limit_method="ANGLE"))])
+    return ob
 
 
 # ---------------------------------------------------------------------------
@@ -1337,7 +1540,20 @@ def weight_gloves(ob, arm):
     add_armature_mod(ob, arm)
 
 
-def build_rig(deform_objs, rigid_head_objs, transfer_objs=(), glove_objs=()):
+def sling_back_matrix():
+    """非携行時：ライフルを背中に斜め掛け（銃の側面を背中に沿わせ、銃口は左肩の上）"""
+    X = V(0.55, 0.0, 0.83).normalized()
+    Yr = V(0.0, 1.0, 0.0)
+    Z = X.cross(Yr)
+    mid = V(0.0, 0.265, 1.12)
+    o = mid - X * 0.5
+    return Matrix(((X.x, Yr.x, Z.x, o.x), (X.y, Yr.y, Z.y, o.y), (X.z, Yr.z, Z.z, o.z), (0, 0, 0, 1)))
+
+
+WEAPON_BONE_LEN = 0.2
+
+
+def build_rig(deform_objs, rigid_head_objs, transfer_objs=(), glove_objs=(), rifle=None):
     ad = bpy.data.armatures.new("Soldier_Rig")
     arm = bpy.data.objects.new("Soldier_Rig", ad)
     COLL.objects.link(arm)
@@ -1377,7 +1593,17 @@ def build_rig(deform_objs, rigid_head_objs, transfer_objs=(), glove_objs=()):
         bone("shin" + sfx, m(KNEE), m(ANKLE), "thigh" + sfx, True)
         bone("foot" + sfx, m(ANKLE), m(V(0.115, -0.085, 0.03)), "shin" + sfx, True)
         bone("toe" + sfx, m(V(0.115, -0.085, 0.03)), m(V(0.12, -0.165, 0.03)), "foot" + sfx, True)
+    # 武器ボーン（変形なし）：ボーンのテール＝ライフル原点。レスト位置は背中の斜め掛け
+    wb = bone("weapon", V(0, 0, 0), V(0, WEAPON_BONE_LEN, 0))
+    wb.matrix = sling_back_matrix() @ Matrix.Translation((0, -WEAPON_BONE_LEN, 0))
+    wb.use_deform = False
     bpy.ops.object.mode_set(mode="OBJECT")
+    if rifle is not None:
+        rifle.parent = arm
+        rifle.parent_type = "BONE"
+        rifle.parent_bone = "weapon"
+        rifle.matrix_parent_inverse = Matrix.Identity(4)
+        rifle.matrix_basis = Matrix.Identity(4)
 
     for ob in deform_objs:
         for o in vl.objects:
@@ -1508,7 +1734,7 @@ def build(variant="gas"):
     COLL = bpy.data.collections.new("Soldier")
     bpy.context.scene.collection.children.link(COLL)
 
-    M = build_materials()
+    M = build_materials("black" if variant == "ghost" else "multicam")
     if variant == "ghost":
         M["balaclava"] = skull_material()
     torso_bvh = bvh_of(torso_parts)
@@ -1528,11 +1754,12 @@ def build(variant="gas"):
     else:
         face_gear = list(build_mask(M, head_bvh))
 
+    rifle = build_rifle(M)
     cam, target = setup_scene(M)
     rig = build_rig([body, boots, laces],
                     [helmet] + face_gear,
                     [vest, pouches, belt, belt_gear, knees],
-                    [gloves])
+                    [gloves], rifle=rifle)
     # ディスプレイスはアーマチュアより前（レスト形状基準）に置く
     for i, md in enumerate(list(body.modifiers)):
         if md.type == "DISPLACE":
@@ -1586,13 +1813,27 @@ def main():
     zs = [ (body.matrix_world @ v.co).z for v in body.data.vertices ]
     print("Body (balaclava top) height: %.3f m" % max(zs))
     _ = deps
+    if render:
+        render_views(render, ctx, "" if variant == "gas" else variant + "_")
+    if "--no-motions" not in argv:
+        add_motions(ctx["rig"])
     if save:
         bpy.ops.wm.save_as_mainfile(filepath=save)
         print("saved", save)
-    if render:
-        render_views(render, ctx, "" if variant == "gas" else variant + "_")
-        if save:
-            bpy.ops.wm.save_as_mainfile(filepath=save)
+
+
+def add_motions(rig):
+    """同じフォルダの soldier_motions.py で歩行・走行・しゃがみ・匍匐（素手／小銃）を焼き込む"""
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+    path = os.path.join(here, "soldier_motions.py")
+    if not os.path.exists(path):
+        print("soldier_motions.py not found; skipping motions")
+        return
+    spec = importlib.util.spec_from_file_location("soldier_motions", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.make_all(rig)
 
 
 DEFAULT_VARIANT = "gas"   # "gas"=ガスマスク / "ghost"=ゴーストマスク
