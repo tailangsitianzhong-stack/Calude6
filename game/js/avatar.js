@@ -89,16 +89,31 @@ export class Avatar {
       if (a) a.timeScale = base ? sgn * Math.max(0.7, Math.min(1.1, hs / base)) : 1;   // 再生速度は最大 1.1 倍
     }
     this.wasGround = p.onGround;
+    // 前フレームで加えた狙いの曲げを元に戻す（アニメーションにトラックのないボーンは値が残り、積み重なるため）
+    if (this.saved) for (const [b, pos, q] of this.saved) { b.position.copy(pos); b.quaternion.copy(q); }
     this.mixer.update(dt);
+    this.saved = ['spine', 'chest', 'weapon'].map((n) => this.root.getObjectByName(n)).filter(Boolean)
+      .map((b) => [b, b.position.clone(), b.quaternion.clone()]);
     // 上下の狙い：視点の上下に合わせて背骨・胸を曲げる（銃口がカメラの照準方向を向く）
     if (!p.prone) {
       this.root.updateMatrixWorld(true);
       const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
       // 体を曲げるのは自然な範囲まで（下 -25°〜上 +35°）。それ以上はカメラだけが傾く
       const bend = Math.max(-0.44, Math.min(0.6, p.pitch));
+      const chest = this.root.getObjectByName('chest');
+      const weapon = this.root.getObjectByName('weapon');
+      const before = chest ? chest.matrixWorld.clone() : null;
       for (const [n, k] of [['spine', 0.4], ['chest', 0.6]]) {
         const b = this.root.getObjectByName(n);
-        if (b) { b.rotateOnWorldAxis(right, bend * k); b.updateMatrixWorld(true); }
+        if (b) { b.rotateOnWorldAxis(right, -bend * k); b.updateMatrixWorld(true); }
+      }
+      // 銃のボーンは胸の子ではないので、胸と同じだけ動かす（手から銃が離れないように）
+      if (chest && weapon && weapon.parent) {
+        const delta = chest.matrixWorld.clone().multiply(before.invert());
+        const w = delta.multiply(weapon.matrixWorld);
+        const local = weapon.parent.matrixWorld.clone().invert().multiply(w);
+        local.decompose(weapon.position, weapon.quaternion, weapon.scale);
+        weapon.updateMatrixWorld(true);
       }
     }
   }
