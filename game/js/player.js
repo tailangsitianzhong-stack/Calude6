@@ -103,9 +103,9 @@ export class Player {
     if (eyeT <= this.eye || this.pos.y + eyeT + 0.15 < ceil) this.eye += (eyeT - this.eye) * Math.min(1, dt * (this.stance === 2 ? 5 : 10));
     // 移動
     // 三人称のモーション速度に合わせた移動速度（足が滑らない）：伏せ 0.34 / しゃがみ 1.17 / 通常 4.1 / ダッシュ 5.5 m/s
-    let speed = this.stance === 2 ? 0.34 : this.stance === 1 ? 1.17 : sprint ? 5.5 : 4.1;
-    if (this.stance === 0) speed = lerpN(speed, 1.6, this.ads);   // 照準しながら歩く 1.6 m/s
-    if (k.KeyQ || k.AltLeft) speed = Math.min(speed, 1.2);   // ゆっくり歩く（歩行モーションの速度に合わせる）
+    let speed = this.stance === 2 ? 0.34 : this.stance === 1 ? 1.17 : sprint ? 6.1 : 4.2;
+    if (this.stance === 0) speed = lerpN(speed, 0.95, this.ads);   // 照準しながら歩く
+    if (k.KeyQ || k.AltLeft) speed = Math.min(speed, 0.9);   // ゆっくり歩く（歩行モーションの速度に合わせる）
     if (!this.alive) speed = 0;
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);

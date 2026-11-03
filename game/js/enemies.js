@@ -24,7 +24,15 @@ export class EnemyManager {
     this.player = player;
     this.list = [];
     this.clips = {};
-    for (const a of gltf.animations) this.clips[a.name] = stripRootMotion(a);
+    for (const a of gltf.animations) {
+      const tr = a.tracks.find((t) => /^Soldier_Rig\.position$/.test(t.name));
+      if (tr) {
+        const v = tr.values, n = v.length / 3;
+        const d = Math.hypot(v[(n - 1) * 3] - v[0], v[(n - 1) * 3 + 2] - v[2]);
+        if (d > 0.05) ANIM_SPEED[a.name] = d / (tr.times[n - 1] - tr.times[0]);
+      }
+      this.clips[a.name] = stripRootMotion(a);
+    }
     this.gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     this.alertPos = null;
   }

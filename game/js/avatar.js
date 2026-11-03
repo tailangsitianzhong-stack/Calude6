@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 // Blender で焼き込んだ各アクションの速度（m/s）とジャンプの区切り（位相）
-const SPEED = {
+const SPEED = {   // 読み込み時に実際の値で上書き
   Walk_Ready: 1.30 / (32 / 30), Jog_Rifle: 2.46 / (18 / 30), Sprint_Rifle: 3.12 / (17 / 30), Walk_Aim: 1.50 / (28 / 30),
   Crouch_Rifle: 1.47 * 0.85 / (32 / 30), Prone_Rifle: 0.55 / (48 / 30),
 };
@@ -19,7 +19,15 @@ export class Avatar {
     scene.add(this.root);
     this.mixer = new THREE.AnimationMixer(this.root);
     this.actions = {};
+    this.speed = {};
     for (const clip of gltf.animations) {
+      // ルートモーション（前進量）から各モーションの速度を求める → 移動速度と再生速度を合わせる
+      const tr = clip.tracks.find((t) => /^Soldier_Rig\.position$/.test(t.name));
+      if (tr) {
+        const v = tr.values, n = v.length / 3;
+        const d = Math.hypot(v[(n - 1) * 3] - v[0], v[(n - 1) * 3 + 2] - v[2]);
+        if (d > 0.05) SPEED[clip.name] = d / (tr.times[n - 1] - tr.times[0]);
+      }
       const c = clip.clone();
       c.tracks = c.tracks.filter((t) => !/^Soldier_Rig\.position$/.test(t.name));   // 上昇・前進はゲーム側の物理で
       this.actions[c.name] = this.mixer.clipAction(c);
@@ -75,7 +83,7 @@ export class Avatar {
         if (hs < 0.25) { name = 'Idle_Rifle'; base = 0; } else { name = 'Walk_Aim'; base = SPEED.Walk_Aim; }
       } else if (hs < 0.25) { name = 'Idle_Ready'; base = 0; }
       else if (sprint) { name = 'Sprint_Rifle'; base = SPEED.Sprint_Rifle; }
-      else if (hs > 2.2) { name = 'Jog_Rifle'; base = SPEED.Jog_Rifle; }
+      else if (hs > 2.0) { name = 'Jog_Rifle'; base = SPEED.Jog_Rifle; }
       else { name = 'Walk_Ready'; base = SPEED.Walk_Ready; }
       const a = this.play(name);
       if (a) a.timeScale = base ? sgn * Math.max(0.7, Math.min(1.1, hs / base)) : 1;   // 再生速度は最大 1.1 倍

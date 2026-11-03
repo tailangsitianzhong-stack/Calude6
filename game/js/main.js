@@ -206,7 +206,7 @@ async function load() {
   // 配信先が .glb を扱えない場合は埋め込み glTF（.json）を使う（window.__ASSET_EXT で指定）
   const ext = window.__ASSET_EXT || '.glb';
   // モデルを更新したら古いキャッシュを使わないよう版を付ける
-  const ASSET_V = '?v=20261103b';
+  const ASSET_V = '?v=20261103c';
   const [soldier, vm, av] = await Promise.all([loadGLB('assets/soldier' + ext + ASSET_V, 0.55, 0.85), loadGLB('assets/viewmodel' + ext + ASSET_V, 0.85, 0.9),
     loadGLB('assets/avatar' + ext + ASSET_V, 0.9, 0.98)]);
   // ビューモデル

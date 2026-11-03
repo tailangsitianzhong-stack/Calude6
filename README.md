@@ -32,6 +32,8 @@ Dope Sheet → **Action Editor** でアクションを切り替えます（ラ�
 | `Walk_Aim` | 照準したまま歩く | 28f | 1.6 m/s |
 | `Death` | 被弾でのけぞる→膝が崩れる→膝をつく→前のめりに倒れる→右側を下に横たわる（銃は手を離れて落ちる） | 54f | — |
 
+歩き・走り（`Walk` `Run` `Walk_Rifle` `Run_Rifle` `Walk_Ready` `Jog_Rifle` `Sprint_Rifle` `Idle_Ready` `Walk_Aim`）は、モーションキャプチャー集 [Quaternius Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)（CC0、`third_party/quaternius_ual/`）の Walk / Jog / Sprint / Idle をこのリグへ移植したもの。銃を持つアクションは脚・胴・頭がモーションキャプチャー、腕だけ IK で銃に合わせています。
+
 その場で再生したい場合は、アクション内の `location`（Root Motion グループ）の F カーブをミュートしてください。
 
 ## 再生成

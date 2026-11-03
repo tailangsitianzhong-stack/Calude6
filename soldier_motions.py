@@ -599,7 +599,14 @@ def gait_pose(rest, name, phi, rifle, over=None):
         pose.weapon = M["chest"] @ rest.b["chest"]["R"].inverted() @ sling_rest(rest)
         return pose
 
-    # --- ライフル保持
+    hold_rifle(rest, pose, RS)
+    return pose
+
+
+def hold_rifle(rest, pose, RS):
+    """胸の姿勢が決まった pose に、RS の構え方で銃を持たせる（腕は IK）"""
+    M = pose.matrices()
+    Qc = pose.Q["chest"]
     Rch = M["chest"] @ rest.b["chest"]["R"].inverted()
     if RS["style"] == "hip":
         # 腰だめ（Call of Duty 風）：銃口は常に照準方向（正面・水平）へ。床尾の位置だけ胸の肩口に追従し、
@@ -974,6 +981,134 @@ def ragdoll_pose(rest, k, base=None, w=1.0, bounce=0.0):
 
 
 # ---------------------------------------------------------------------------
+# モーションキャプチャーの移植（Quaternius Universal Animation Library, CC0）
+#   元のボーンのワールド回転の変化量をこのリグへ写す。腕は元が T ポーズなので、
+#   レスト時のボーン方向の差を補正してから写す。銃を持つアクションは腕だけ IK で銃に合わせる
+# ---------------------------------------------------------------------------
+
+UAL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party", "quaternius_ual", "UAL_Standard.glb")
+UAL_MAP = {
+    "hips": "DEF-hips", "spine": "DEF-spine.001", "chest": "DEF-spine.003", "neck": "DEF-neck", "head": "DEF-head",
+    "shoulder.L": "DEF-shoulder.L", "upper_arm.L": "DEF-upper_arm.L", "forearm.L": "DEF-forearm.L", "hand.L": "DEF-hand.L",
+    "shoulder.R": "DEF-shoulder.R", "upper_arm.R": "DEF-upper_arm.R", "forearm.R": "DEF-forearm.R", "hand.R": "DEF-hand.R",
+    "thigh.L": "DEF-thigh.L", "shin.L": "DEF-shin.L", "foot.L": "DEF-foot.L", "toe.L": "DEF-toe.L",
+    "thigh.R": "DEF-thigh.R", "shin.R": "DEF-shin.R", "foot.R": "DEF-foot.R", "toe.R": "DEF-toe.R",
+}
+
+
+def _rot_between(a, b):
+    a, b = a.normalized(), b.normalized()
+    return a.rotation_difference(b).to_matrix()
+
+
+def sample_mocap(rest, clips):
+    """clips: {名前: 元アクション名}。各クリップを 30fps で標本化して、ボーンごとの回転 Q と骨盤位置、前進速度を返す"""
+    if not os.path.exists(UAL_PATH):
+        print("mocap library not found:", UAL_PATH)
+        return {}
+    before = set(bpy.data.objects)
+    acts_before = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=UAL_PATH)
+    new = [o for o in bpy.data.objects if o not in before]
+    src = [o for o in new if o.type == "ARMATURE"][0]
+    for o in new:
+        if o is not src:
+            o.hide_render = True
+    sc = bpy.context.scene
+    W0 = {n: (src.matrix_world @ src.data.bones[b].matrix_local).to_3x3() for n, b in UAL_MAP.items()}
+    # 腕など、レスト時のボーン方向が違うものの補正
+    A = {}
+    for n, b in UAL_MAP.items():
+        sb = src.data.bones[b]
+        sdir = (sb.tail_local - sb.head_local)
+        tdir = rest.b[n]["tail"] - rest.b[n]["head"]
+        A[n] = _rot_between(tdir, sdir) if n.split(".")[0] in ("shoulder", "upper_arm", "forearm", "hand") else Matrix.Identity(3)
+    hip0 = src.matrix_world @ src.data.bones["DEF-hips"].head_local
+    scale = rest.b["thigh.L"]["head"].z / (src.matrix_world @ src.data.bones["DEF-thigh.L"].head_local).z
+    out = {}
+    src_fps = 24.0
+    for name, aname in clips.items():
+        act = bpy.data.actions.get(aname)
+        if act is None:
+            print("missing mocap clip", aname)
+            continue
+        src.animation_data_create()
+        src.animation_data.action = act
+        f0, f1 = act.frame_range
+        dur = (f1 - f0) / src_fps
+        n = max(8, round(dur * FPS))
+        frames = []
+        for i in range(n):
+            sc.frame_set(int(f0), subframe=0.0)
+            fr = f0 + (f1 - f0) * i / n
+            sc.frame_set(int(math.floor(fr)), subframe=fr - math.floor(fr))
+            bpy.context.view_layer.update()
+            Q = {}
+            for tn, b in UAL_MAP.items():
+                Wt = (src.matrix_world @ src.pose.bones[b].matrix).to_3x3()
+                Q[tn] = Wt @ W0[tn].inverted() @ A[tn]
+            hp = src.matrix_world @ src.pose.bones["DEF-hips"].head
+            toes = [src.matrix_world @ src.pose.bones["DEF-foot." + s].head for s in "LR"]
+            frames.append(dict(Q=Q, hip=(hp - hip0) * scale, feet=toes))
+        # 前進速度：接地している（低い方の）足が後ろへ動く速さ
+        # 接地中（地面近く）の足が後ろへ動く速さの平均
+        zmin = min(min(f["feet"][0].z, f["feet"][1].z) for f in frames)
+        vs = []
+        for i in range(n):
+            a, b = frames[i], frames[(i + 1) % n]
+            for k in (0, 1):
+                if a["feet"][k].z < zmin + 0.06 and b["feet"][k].z < zmin + 0.06:
+                    vs.append((b["feet"][k].y - a["feet"][k].y) * FPS)
+        vs = [v for v in vs if v > 0] or [0.0]
+        vs.sort()
+        speed = vs[len(vs) // 2] * scale
+        out[name] = dict(frames=frames, n=n, speed=speed)
+        print("mocap %-14s <- %-16s %3d frames  %.2f m/s" % (name, aname, n, speed))
+    for o in new:
+        bpy.data.objects.remove(o, do_unlink=True)
+    for a in list(bpy.data.actions):
+        if a not in acts_before:
+            bpy.data.actions.remove(a)
+    return out
+
+
+def mocap_pose(rest, clip, phi, RS=None, arms=True, extra_drop=0.0):
+    fr = clip["frames"][int(round(phi * clip["n"])) % clip["n"]]
+    pose = Pose(rest)
+    for n, q in fr["Q"].items():
+        if not arms and n.split(".")[0] in ("shoulder", "upper_arm", "forearm", "hand"):
+            continue
+        pose.Q[n] = q
+    h = fr["hip"].copy()
+    h.y = 0.0                                                   # その場（前進はルートモーション）
+    pose.hips_pos = rest.b["hips"]["head"] + h + V(0, 0, -extra_drop)
+    # 足の接地：低い方の足首をレストの高さに合わせる（体格差による浮き・めり込みを除く）
+    M = pose.matrices()
+    lo = min(bone_point(rest, M, "foot" + s, rest.side[k]["ankle"]).z for s, k in ((".L", 1), (".R", -1)))
+    pose.hips_pos.z += rest.side[1]["ankle"].z - lo
+    if RS is not None:
+        if not arms:
+            for s in (1, -1):
+                sfx = rest.side[s]["sfx"]
+                pose.Q["shoulder" + sfx] = pose.Q["chest"]
+        hold_rifle(rest, pose, RS)
+    else:
+        M = pose.matrices()
+        pose.weapon = M["chest"] @ rest.b["chest"]["R"].inverted() @ sling_rest(rest)
+    return pose
+
+
+# ゲームで使う歩き・走りはモーションキャプチャーに置き換え（アクション名 → (元クリップ, 構え)）
+MOCAP_ACTIONS = {
+    "Walk": ("Walk_Loop", None), "Run": ("Jog_Fwd_Loop", None),
+    "Walk_Ready": ("Walk_Loop", "WalkReady"), "Jog_Rifle": ("Jog_Fwd_Loop", "Jog"),
+    "Sprint_Rifle": ("Sprint_Loop", "Sprint"), "Idle_Ready": ("Idle_Loop", "StandReady"),
+    "Walk_Aim": ("Walk_Loop", "WalkAim"),
+    "Walk_Rifle": ("Walk_Loop", "Walk"), "Run_Rifle": ("Jog_Fwd_Loop", "Run"),
+}
+
+
+# ---------------------------------------------------------------------------
 # 焼き込み
 # ---------------------------------------------------------------------------
 
@@ -1078,6 +1213,16 @@ def make_all(arm=None, default="Walk_Rifle"):
         act_name = "Jump" + ("_Rifle" if rifle else "")
         made[act_name] = (bake(arm, rest, act_name, JUMP_T, 0.0, lambda t, r=rifle: jump_pose(rest, t, r),
                                loop=False, root_z=jump_root_z), JUMP_T)
+    clips = sample_mocap(rest, {k: v[0] for k, v in MOCAP_ACTIONS.items()})
+    for act_name, (src, style) in MOCAP_ACTIONS.items():
+        c = clips.get(act_name)
+        if not c:
+            continue
+        RS = dict(RIFLE_STYLE[style]) if style else None
+        T = c["n"]
+        stride = c["speed"] * T / FPS
+        made[act_name] = (bake(arm, rest, act_name, T, stride,
+                               lambda phi, c=c, RS=RS: mocap_pose(rest, c, phi, RS, arms=RS is None)), T)
     act, T = made[default]
     arm.animation_data.action = act
     scene.frame_start, scene.frame_end = 0, T * 4 - 1
