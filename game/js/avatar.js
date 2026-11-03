@@ -86,9 +86,11 @@ export class Avatar {
     if (!p.prone) {
       this.root.updateMatrixWorld(true);
       const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+      // 体を曲げるのは自然な範囲まで（下 -25°〜上 +35°）。それ以上はカメラだけが傾く
+      const bend = Math.max(-0.44, Math.min(0.6, p.pitch));
       for (const [n, k] of [['spine', 0.4], ['chest', 0.6]]) {
         const b = this.root.getObjectByName(n);
-        if (b) { b.rotateOnWorldAxis(right, p.pitch * k); b.updateMatrixWorld(true); }
+        if (b) { b.rotateOnWorldAxis(right, bend * k); b.updateMatrixWorld(true); }
       }
     }
   }

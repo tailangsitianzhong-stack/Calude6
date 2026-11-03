@@ -206,7 +206,7 @@ async function load() {
   // 配信先が .glb を扱えない場合は埋め込み glTF（.json）を使う（window.__ASSET_EXT で指定）
   const ext = window.__ASSET_EXT || '.glb';
   // モデルを更新したら古いキャッシュを使わないよう版を付ける
-  const ASSET_V = '?v=20261103a';
+  const ASSET_V = '?v=20261103b';
   const [soldier, vm, av] = await Promise.all([loadGLB('assets/soldier' + ext + ASSET_V, 0.55, 0.85), loadGLB('assets/viewmodel' + ext + ASSET_V, 0.85, 0.9),
     loadGLB('assets/avatar' + ext + ASSET_V, 0.9, 0.98)]);
   // ビューモデル
@@ -397,6 +397,8 @@ window.__toggleView = toggleView;
 
 const _camTmp = new THREE.Vector3();
 function thirdPersonCamera(dt, sprint) {
+  // 三人称では真上・真下を向けないようにする（キャラを見下ろす角度になって姿勢が崩れて見えるため）
+  player.pitch = Math.max(-0.7, Math.min(0.85, player.pitch));
   avatar.update(dt, player, sprint);
   const pivot = player.pos.clone().add(new THREE.Vector3(0, Math.max(0.6, player.eye * 0.95) + 0.12, 0));
   const fwd = player.forward;
