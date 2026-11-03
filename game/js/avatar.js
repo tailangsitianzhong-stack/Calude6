@@ -82,5 +82,14 @@ export class Avatar {
     }
     this.wasGround = p.onGround;
     this.mixer.update(dt);
+    // 上下の狙い：視点の上下に合わせて背骨・胸を曲げる（銃口がカメラの照準方向を向く）
+    if (!p.prone) {
+      this.root.updateMatrixWorld(true);
+      const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+      for (const [n, k] of [['spine', 0.4], ['chest', 0.6]]) {
+        const b = this.root.getObjectByName(n);
+        if (b) { b.rotateOnWorldAxis(right, p.pitch * k); b.updateMatrixWorld(true); }
+      }
+    }
   }
 }

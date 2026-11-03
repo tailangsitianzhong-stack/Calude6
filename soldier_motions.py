@@ -460,23 +460,23 @@ GAITS = {
                      arm_swing=0, arm_fwd=2, elbow=18, elbow_amp=0, abd=12, toe_out=8),
     # --- Call of Duty 風（三人称）：腰だめ＝銃は胸の高さで前方へ、照準時のみ目線へ。上体は安定、脚はやわらかく
     "WalkReady": dict(T=32, stride=1.30, duty=0.60, strike_off=0.32, foot_x=0.11, drop=0.055, bob=0.012,
-                      sway=0.018, yaw=5.0, roll=3.5, lean=7.0, chest_yaw=1.5, lift=0.10,
+                      sway=0.022, yaw=6.0, roll=4.0, lean=7.0, chest_yaw=7.0, lift=0.10, lean_osc=1.5, side_flex=2.5,
                       pitch_strike=15, pitch_off=32, heel_rock=0.2, heel_off=0.52, head_pitch=-2.0,
                       arm_swing=0, arm_fwd=0, elbow=0, elbow_amp=0, abd=12, swing_dorsi=10, toe_out=9),
     "Jog": dict(T=18, stride=2.46, duty=0.32, strike_off=0.28, foot_x=0.08, drop=0.08, bob=0.03,
-                sway=0.014, yaw=7.0, roll=4.0, lean=10.0, chest_yaw=2.5, lift=0.30,
+                sway=0.018, yaw=8.0, roll=5.0, lean=10.0, chest_yaw=10.0, lift=0.30, lean_osc=3.0, side_flex=3.5,
                 pitch_strike=6, pitch_off=56, heel_rock=0.12, heel_off=0.3, head_pitch=-6.0,
                 arm_swing=0, arm_fwd=0, elbow=0, elbow_amp=0, abd=10, run=True, swing_dorsi=16,
                 lift_fn=lambda t: smooth(t / 0.32) if t < 0.32 else 1.0 - smooth((t - 0.32) / 0.55),
                 swing_ease=lambda t: smooth(t) * 0.6 + swing_ease(t) * 0.4),
     "Sprint": dict(T=17, stride=3.12, duty=0.28, strike_off=0.30, foot_x=0.07, drop=0.09, bob=0.035,
-                   sway=0.012, yaw=10.0, roll=5.0, lean=16.0, chest_yaw=10.0, lift=0.36,
+                   sway=0.014, yaw=10.0, roll=5.0, lean=16.0, chest_yaw=14.0, lift=0.36, lean_osc=3.5, side_flex=4.0,
                    pitch_strike=4, pitch_off=62, heel_rock=0.1, heel_off=0.25, head_pitch=-10.0,
                    arm_swing=0, arm_fwd=0, elbow=0, elbow_amp=0, abd=10, run=True, swing_dorsi=18,
                    lift_fn=lambda t: smooth(t / 0.3) if t < 0.3 else 1.0 - smooth((t - 0.3) / 0.55),
                    swing_ease=lambda t: smooth(t) * 0.6 + swing_ease(t) * 0.4),
     "StandReady": dict(T=60, stride=0.0, duty=1.0, strike_off=0.0, foot_x=0.13, drop=0.045, bob=0.004,
-                       sway=0.004, yaw=0.8, roll=0.5, lean=6.0, chest_yaw=0.5, lift=0.0,
+                       sway=0.006, yaw=1.0, roll=0.8, lean=6.0, chest_yaw=1.5, lift=0.0, lean_osc=0.8, side_flex=0.8,
                        pitch_strike=0, pitch_off=0, heel_rock=0.1, heel_off=0.9, head_pitch=-2.0,
                        arm_swing=0, arm_fwd=5, elbow=20, elbow_amp=0, abd=12, toe_out=16,
                        foot_y={1: -0.12, -1: 0.10}),
@@ -499,13 +499,13 @@ RIFLE_STYLE = {
     "Run": dict(style="ready", pocket=V(-0.10, -0.18, 1.33), pitch=46, yaw=32, cant=16, blade=-20,
                 head_pitch=4.0, stride_scale=1.0, drop_add=0.0, lean_add=2.0),
     # 構えながら前進：照準線に目を合わせ、銃は水平に安定
-    "WalkReady": dict(style="ready", pocket=V(-0.12, -0.19, 1.32), pitch=8, yaw=12, cant=0, blade=-18,
+    "WalkReady": dict(style="hip", pocket=V(-0.13, -0.19, 1.33), pitch=2, yaw=0, cant=0, blade=-14,
                       head_pitch=0.0, stride_scale=1.0, drop_add=0.0, lean_add=0.0),
-    "Jog": dict(style="ready", pocket=V(-0.12, -0.20, 1.31), pitch=12, yaw=13, cant=4, blade=-16,
+    "Jog": dict(style="hip", pocket=V(-0.13, -0.20, 1.32), pitch=3, yaw=0, cant=0, blade=-12,
                 head_pitch=0.0, stride_scale=1.0, drop_add=0.0, lean_add=0.0),
     "Sprint": dict(style="ready", pocket=V(-0.10, -0.19, 1.33), pitch=46, yaw=34, cant=18, blade=-20,
                    head_pitch=0.0, stride_scale=1.0, drop_add=0.0, lean_add=0.0),
-    "StandReady": dict(style="ready", pocket=V(-0.12, -0.19, 1.32), pitch=7, yaw=11, cant=0, blade=-22,
+    "StandReady": dict(style="hip", pocket=V(-0.13, -0.19, 1.33), pitch=2, yaw=0, cant=0, blade=-20,
                        head_pitch=0.0, stride_scale=1.0, drop_add=0.0, lean_add=0.0),
     "WalkAim": dict(style="aim", pocket=V(-0.105, -0.17, 1.395), head_pitch=0.0, blade=-30,
                     stride_scale=1.0, drop_add=0.0, lean_add=0.0),
@@ -553,7 +553,9 @@ def gait_pose(rest, name, phi, rifle, over=None):
         cyaw *= 0.25
     blade = rad(RS["blade"]) if RS else 0.0          # 構え時は左肩を前に（ブレーディング）
     pose.Q["spine"] = Rz(yaw * 0.3 + cyaw * 0.3 + blade * 0.4) @ Rx(lean * 0.85) @ Ry(roll * 0.3)
-    pose.Q["chest"] = Rz(cyaw + blade) @ Rx(lean) @ Ry(-roll * 0.2)
+    lean_osc = rad(P.get("lean_osc", 0.0)) * math.cos(4 * math.pi * (phi - D / 2 if P.get("run") else phi))
+    side = rad(P.get("side_flex", 0.0)) * math.sin(tw)
+    pose.Q["chest"] = Rz(cyaw + blade) @ Rx(lean + lean_osc) @ Ry(-roll * 0.2 + side)
     hp = rad(P["head_pitch"] + (RS["head_pitch"] if RS else 0.0))
     head_roll = rad(RS.get("head_roll", 0.0)) if RS else 0.0
     head_yaw = rad(RS.get("head_yaw", 0.0)) if RS else 0.0
@@ -599,7 +601,13 @@ def gait_pose(rest, name, phi, rifle, over=None):
 
     # --- ライフル保持
     Rch = M["chest"] @ rest.b["chest"]["R"].inverted()
-    if RS["style"] == "ready":
+    if RS["style"] == "hip":
+        # 腰だめ（Call of Duty 風）：銃口は常に照準方向（正面・水平）へ。床尾の位置だけ胸の肩口に追従し、
+        # 腕は IK で銃に合わせる → 胸・肩が自然に揺れても銃口は前を向いたまま
+        Rr = Rx(rad(RS["pitch"])) @ R0
+        pocket = (Rch @ RS["pocket"].to_4d()).to_3d()
+        G = mat4(Rr, pocket - Rr @ RIFLE["butt"])
+    elif RS["style"] == "ready":
         Rr = Rz(rad(RS["yaw"])) @ Rx(rad(RS["pitch"])) @ R0 @ Rx(rad(RS["cant"]))
         o = RS["pocket"] - Rr @ RIFLE["butt"]
         G = Rch @ mat4(Rr, o)
